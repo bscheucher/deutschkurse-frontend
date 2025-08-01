@@ -1,262 +1,289 @@
-import React, { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
+// src/components/forms/KursForm.tsx
+import React, { useState, useEffect } from 'react';
+import { useQuery } from 'react-query';
 import DatePicker from 'react-datepicker';
-import "react-datepicker/dist/react-datepicker.css";
-import { CreateKursDto, KursStatus } from '../../types/kurs.types';
-import { X } from 'lucide-react';
+import 'react-datepicker/dist/react-datepicker.css';
+import { de } from 'date-fns/locale';
+import { Kurs } from '../../types/kurs.types';
+import trainerService from '../../services/trainerService';
+import LoadingSpinner from '../common/LoadingSpinner';
 
 interface KursFormProps {
-  onSubmit: (data: CreateKursDto) => Promise<void>;
-  onClose: () => void;
-  initialData?: Partial<CreateKursDto>;
-  isEdit?: boolean;
+  initialData: Kurs | null;
+  onSubmit: (data: Partial<Kurs>) => void;
+  onCancel: () => void;
+  isLoading?: boolean;
 }
 
-const schema = yup.object({
-  kursName: yup.string().required('Kursname ist erforderlich').max(200),
-  kurstypId: yup.number().required('Kurstyp ist erforderlich').positive(),
-  kursraumId: yup.number().required('Kursraum ist erforderlich').positive(),
-  trainerId: yup.number().required('Trainer ist erforderlich').positive(),
-  startdatum: yup.date().required('Startdatum ist erforderlich')
-    .min(new Date(), 'Startdatum muss in der Zukunft liegen'),
-  enddatum: yup.date().required('Enddatum ist erforderlich')
-    .when('startdatum', (startdatum, schema) => {
-      return schema.min(startdatum, 'Enddatum muss nach dem Startdatum liegen');
-    }),
-  maxTeilnehmer: yup.number().required('Max. Teilnehmer ist erforderlich')
-    .positive().max(50, 'Maximal 50 Teilnehmer erlaubt'),
-  status: yup.string().oneOf(['geplant', 'laufend', 'abgeschlossen', 'abgebrochen']).required(),
-  beschreibung: yup.string().max(1000, 'Beschreibung darf maximal 1000 Zeichen lang sein'),
-});
-
-const KursForm: React.FC<KursFormProps> = ({ onSubmit, onClose, initialData, isEdit }) => {
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors, isSubmitting },
-    watch,
-  } = useForm<CreateKursDto>({
-    resolver: yupResolver(schema),
-    defaultValues: {
-      status: 'geplant',
-      maxTeilnehmer: 12,
-      ...initialData,
-    },
+const KursForm: React.FC<KursFormProps> = ({ 
+  initialData, 
+  onSubmit, 
+  onCancel,
+  isLoading = false 
+}) => {
+  const [formData, setFormData] = useState<Partial<Kurs>>({
+    kursName: '',
+    kurstypId: 1,
+    kursraumId: 1,
+    trainerId: 1,
+    startdatum: new Date().toISOString().split('T')[0],
+    enddatum: '',
+    maxTeilnehmer: 12,
+    status: 'geplant',
+    beschreibung: '',
+    ...initialData
   });
 
-  const startdatum = watch('startdatum');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleFormSubmit = async (data: CreateKursDto) => {
-    try {
-      await onSubmit(data);
-      onClose();
-    } catch (error) {
-      // Error is handled by the parent component
+  // Fetch available trainers
+  const { data: trainers } = useQuery('trainers', trainerService.getAllTrainer);
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.kursName?.trim()) {
+      newErrors.kursName = 'Kursname ist erforderlich';
+    }
+
+    if (!formData.startdatum) {
+      newErrors.startdatum = 'Startdatum ist erforderlich';
+    }
+
+    if (!formData.enddatum) {
+      newErrors.enddatum = 'Enddatum ist erforderlich';
+    } else if (formData.startdatum && formData.enddatum < formData.startdatum) {
+      newErrors.enddatum = 'Enddatum muss nach dem Startdatum liegen';
+    }
+
+    if (!formData.maxTeilnehmer || formData.maxTeilnehmer < 1) {
+      newErrors.maxTeilnehmer = 'Maximale Teilnehmerzahl muss mindestens 1 sein';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validate()) {
+      onSubmit(formData);
     }
   };
 
+  const handleChange = (field: keyof Kurs, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  // Mock data for course types and rooms
+  const kurstypen = [
+    { id: 1, name: 'Deutsch A1' },
+    { id: 2, name: 'Deutsch A2' },
+    { id: 3, name: 'Deutsch B1' },
+    { id: 4, name: 'Deutsch B2' },
+    { id: 5, name: 'Deutsch C1' },
+  ];
+
+  const kursraeume = [
+    { id: 1, name: 'Raum A101' },
+    { id: 2, name: 'Raum A102' },
+    { id: 3, name: 'Raum B201' },
+    { id: 4, name: 'Raum B202' },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {isEdit ? 'Kurs bearbeiten' : 'Neuer Kurs'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
-          >
-            <X className="w-6 h-6" />
-          </button>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Kursname */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Kursname *
+          </label>
+          <input
+            type="text"
+            value={formData.kursName}
+            onChange={(e) => handleChange('kursName', e.target.value)}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.kursName ? 'border-red-300' : 'border-gray-300'
+            }`}
+            placeholder="z.B. Deutsch A1 - Anfänger Morgens"
+          />
+          {errors.kursName && (
+            <p className="mt-1 text-sm text-red-600">{errors.kursName}</p>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Kursname
-              </label>
-              <input
-                {...register('kursName')}
-                type="text"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              />
-              {errors.kursName && (
-                <p className="mt-1 text-sm text-red-600">{errors.kursName.message}</p>
-              )}
-            </div>
+        {/* Kurstyp */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Kurstyp *
+          </label>
+          <select
+            value={formData.kurstypId}
+            onChange={(e) => handleChange('kurstypId', Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          >
+            {kurstypen.map(typ => (
+              <option key={typ.id} value={typ.id}>{typ.name}</option>
+            ))}
+          </select>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Kurstyp
-              </label>
-              <select
-                {...register('kurstypId')}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Bitte wählen</option>
-                <option value="1">Deutsch A1</option>
-                <option value="2">Deutsch A2</option>
-                <option value="3">Deutsch B1</option>
-                <option value="4">Deutsch B2</option>
-              </select>
-              {errors.kurstypId && (
-                <p className="mt-1 text-sm text-red-600">{errors.kurstypId.message}</p>
-              )}
-            </div>
+        {/* Kursraum */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Kursraum *
+          </label>
+          <select
+            value={formData.kursraumId}
+            onChange={(e) => handleChange('kursraumId', Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          >
+            {kursraeume.map(raum => (
+              <option key={raum.id} value={raum.id}>{raum.name}</option>
+            ))}
+          </select>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Kursraum
-              </label>
-              <select
-                {...register('kursraumId')}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Bitte wählen</option>
-                <option value="1">Raum A101</option>
-                <option value="2">Raum A102</option>
-                <option value="3">Raum B201</option>
-              </select>
-              {errors.kursraumId && (
-                <p className="mt-1 text-sm text-red-600">{errors.kursraumId.message}</p>
-              )}
-            </div>
+        {/* Trainer */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Trainer *
+          </label>
+          <select
+            value={formData.trainerId}
+            onChange={(e) => handleChange('trainerId', Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          >
+            {trainers?.map(trainer => (
+              <option key={trainer.id} value={trainer.id}>
+                {trainer.vorname} {trainer.nachname}
+              </option>
+            ))}
+          </select>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Trainer
-              </label>
-              <select
-                {...register('trainerId')}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Bitte wählen</option>
-                <option value="1">Maria Schmidt</option>
-                <option value="2">Thomas Weber</option>
-                <option value="3">Anna Müller</option>
-              </select>
-              {errors.trainerId && (
-                <p className="mt-1 text-sm text-red-600">{errors.trainerId.message}</p>
-              )}
-            </div>
+        {/* Status */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Status *
+          </label>
+          <select
+            value={formData.status}
+            onChange={(e) => handleChange('status', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="geplant">Geplant</option>
+            <option value="laufend">Laufend</option>
+            <option value="abgeschlossen">Abgeschlossen</option>
+            <option value="abgebrochen">Abgebrochen</option>
+          </select>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Startdatum
-              </label>
-              <Controller
-                control={control}
-                name="startdatum"
-                render={({ field }) => (
-                  <DatePicker
-                    selected={field.value ? new Date(field.value) : null}
-                    onChange={(date) => field.onChange(date?.toISOString().split('T')[0])}
-                    minDate={new Date()}
-                    dateFormat="dd.MM.yyyy"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    placeholderText="Datum wählen"
-                  />
-                )}
-              />
-              {errors.startdatum && (
-                <p className="mt-1 text-sm text-red-600">{errors.startdatum.message}</p>
-              )}
-            </div>
+        {/* Startdatum */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Startdatum *
+          </label>
+          <DatePicker
+            selected={formData.startdatum ? new Date(formData.startdatum) : null}
+            onChange={(date) => handleChange('startdatum', date?.toISOString().split('T')[0] || '')}
+            dateFormat="dd.MM.yyyy"
+            locale={de}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.startdatum ? 'border-red-300' : 'border-gray-300'
+            }`}
+            placeholderText="Datum wählen"
+            minDate={new Date()}
+          />
+          {errors.startdatum && (
+            <p className="mt-1 text-sm text-red-600">{errors.startdatum}</p>
+          )}
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Enddatum
-              </label>
-              <Controller
-                control={control}
-                name="enddatum"
-                render={({ field }) => (
-                  <DatePicker
-                    selected={field.value ? new Date(field.value) : null}
-                    onChange={(date) => field.onChange(date?.toISOString().split('T')[0])}
-                    minDate={startdatum ? new Date(startdatum) : new Date()}
-                    dateFormat="dd.MM.yyyy"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    placeholderText="Datum wählen"
-                  />
-                )}
-              />
-              {errors.enddatum && (
-                <p className="mt-1 text-sm text-red-600">{errors.enddatum.message}</p>
-              )}
-            </div>
+        {/* Enddatum */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Enddatum *
+          </label>
+          <DatePicker
+            selected={formData.enddatum ? new Date(formData.enddatum) : null}
+            onChange={(date) => handleChange('enddatum', date?.toISOString().split('T')[0] || '')}
+            dateFormat="dd.MM.yyyy"
+            locale={de}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.enddatum ? 'border-red-300' : 'border-gray-300'
+            }`}
+            placeholderText="Datum wählen"
+            minDate={formData.startdatum ? new Date(formData.startdatum) : new Date()}
+          />
+          {errors.enddatum && (
+            <p className="mt-1 text-sm text-red-600">{errors.enddatum}</p>
+          )}
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Max. Teilnehmer
-              </label>
-              <input
-                {...register('maxTeilnehmer', { valueAsNumber: true })}
-                type="number"
-                min="1"
-                max="50"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              />
-              {errors.maxTeilnehmer && (
-                <p className="mt-1 text-sm text-red-600">{errors.maxTeilnehmer.message}</p>
-              )}
-            </div>
+        {/* Max Teilnehmer */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Max. Teilnehmer *
+          </label>
+          <input
+            type="number"
+            value={formData.maxTeilnehmer}
+            onChange={(e) => handleChange('maxTeilnehmer', Number(e.target.value))}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.maxTeilnehmer ? 'border-red-300' : 'border-gray-300'
+            }`}
+            min="1"
+            max="50"
+          />
+          {errors.maxTeilnehmer && (
+            <p className="mt-1 text-sm text-red-600">{errors.maxTeilnehmer}</p>
+          )}
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Status
-              </label>
-              <select
-                {...register('status')}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="geplant">Geplant</option>
-                <option value="laufend">Laufend</option>
-                <option value="abgeschlossen">Abgeschlossen</option>
-                <option value="abgebrochen">Abgebrochen</option>
-              </select>
-              {errors.status && (
-                <p className="mt-1 text-sm text-red-600">{errors.status.message}</p>
-              )}
-            </div>
+        {/* Beschreibung */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Beschreibung
+          </label>
+          <textarea
+            value={formData.beschreibung}
+            onChange={(e) => handleChange('beschreibung', e.target.value)}
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Optionale Kursbeschreibung..."
+          />
+        </div>
+      </div>
 
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Beschreibung
-              </label>
-              <textarea
-                {...register('beschreibung')}
-                rows={4}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Optionale Kursbeschreibung..."
-              />
-              {errors.beschreibung && (
-                <p className="mt-1 text-sm text-red-600">{errors.beschreibung.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-6 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Abbrechen
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Wird gespeichert...' : (isEdit ? 'Aktualisieren' : 'Erstellen')}
-            </button>
-          </div>
-        </form>
+      {/* Actions */}
+      <div className="flex justify-end space-x-3 pt-6 border-t">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+        >
+          Abbrechen
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
+        >
+          {isLoading ? (
+            <>
+              <LoadingSpinner size="sm" />
+              <span className="ml-2">Wird gespeichert...</span>
+            </>
+          ) : (
+            initialData ? 'Aktualisieren' : 'Erstellen'
+          )}
+        </button>
       </div>
     </div>
   );
