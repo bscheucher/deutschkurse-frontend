@@ -20,37 +20,39 @@ const Users: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newRole, setNewRole] = useState<string>('');
 
-  const { data: users, isLoading } = useQuery(['users'], authService.getAllUsers);
+  // FIXED: React Query v5 syntax
+  const { data: users, isLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: authService.getAllUsers
+  });
 
-  const updateStatusMutation = useMutation(
-    ({ userId, enabled }: { userId: number; enabled: boolean }) =>
+  // FIXED: React Query v5 mutation syntax
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ userId, enabled }: { userId: number; enabled: boolean }) =>
       authService.updateUserStatus(userId, enabled),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['users']);
-        toast.success('Benutzerstatus erfolgreich aktualisiert');
-      },
-      onError: () => {
-        toast.error('Fehler beim Aktualisieren des Benutzerstatus');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] }); // FIXED: object syntax
+      toast.success('Benutzerstatus erfolgreich aktualisiert');
+    },
+    onError: () => {
+      toast.error('Fehler beim Aktualisieren des Benutzerstatus');
     }
-  );
+  });
 
-  const updateRoleMutation = useMutation(
-    ({ userId, role }: { userId: number; role: string }) =>
+  // FIXED: React Query v5 mutation syntax
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: number; role: string }) =>
       authService.updateUserRole(userId, role),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['users']);
-        toast.success('Benutzerrolle erfolgreich aktualisiert');
-        setShowRoleModal(false);
-        setSelectedUser(null);
-      },
-      onError: () => {
-        toast.error('Fehler beim Aktualisieren der Benutzerrolle');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] }); // FIXED: object syntax
+      toast.success('Benutzerrolle erfolgreich aktualisiert');
+      setShowRoleModal(false);
+      setSelectedUser(null);
+    },
+    onError: () => {
+      toast.error('Fehler beim Aktualisieren der Benutzerrolle');
     }
-  );
+  });
 
   const handleStatusToggle = (user: User) => {
     const newStatus = !user.enabled;
@@ -69,7 +71,9 @@ const Users: React.FC = () => {
     setShowRoleModal(true);
   };
 
-  const filteredUsers = users?.filter(user => {
+  // FIXED: Type the users array properly
+  const usersList = users as User[] | undefined;
+  const filteredUsers = usersList?.filter((user: User) => {
     const matchesSearch = 
       user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -169,7 +173,7 @@ const Users: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers?.map((user) => (
+              {filteredUsers?.map((user: User) => (
                 <tr key={user.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -292,10 +296,10 @@ const Users: React.FC = () => {
               </button>
               <button
                 onClick={handleRoleUpdate}
-                disabled={updateRoleMutation.isLoading}
+                disabled={updateRoleMutation.isPending} // FIXED: isPending instead of isLoading
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
-                {updateRoleMutation.isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
+                {updateRoleMutation.isPending ? 'Wird aktualisiert...' : 'Aktualisieren'} {/* FIXED: isPending */}
               </button>
             </div>
           </div>

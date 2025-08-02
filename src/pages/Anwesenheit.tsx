@@ -9,6 +9,7 @@ import anwesenheitService from '../services/anwesenheitService';
 import kursService from '../services/kursService';
 import { Anwesenheit, BulkAnwesenheitDto } from '../types/anwesenheit.types';
 import { Kurs } from '../types/kurs.types';
+import { Teilnehmer } from '../types/teilnehmer.types';
 
 const AnwesenheitPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -20,61 +21,56 @@ const AnwesenheitPage: React.FC = () => {
     bemerkung: string;
   }>>(new Map());
 
-  // Fetch courses
-  const { data: kurse, isLoading: kurseLoading } = useQuery(
-    'kurse',
-    () => kursService.getAllKurse(),
-    {
-      select: (data) => data.filter(k => k.status === 'laufend'),
-    }
-  );
+  // Fetch courses - FIXED: v5 syntax
+  const { data: kurse, isLoading: kurseLoading } = useQuery({
+    queryKey: ['kurse'],
+    queryFn: () => kursService.getAllKurse(),
+    select: (data: Kurs[]) => data.filter(k => k.status === 'laufend'),
+  });
 
-  // Fetch attendance for selected course and date
-  const { data: anwesenheit, isLoading: anwesenheitLoading, refetch } = useQuery(
-    ['anwesenheit', selectedKurs, format(selectedDate, 'yyyy-MM-dd')],
-    () => anwesenheitService.getByKursAndDatum(
+  // Fetch attendance for selected course and date - FIXED: v5 syntax
+  const { data: anwesenheit, isLoading: anwesenheitLoading, refetch } = useQuery({
+    queryKey: ['anwesenheit', selectedKurs, format(selectedDate, 'yyyy-MM-dd')],
+    queryFn: () => anwesenheitService.getByKursAndDatum(
       selectedKurs!,
       format(selectedDate, 'yyyy-MM-dd')
     ),
-    {
-      enabled: !!selectedKurs,
-      onSuccess: (data) => {
-        // Initialize attendance data
-        const newAttendanceData = new Map();
-        data.forEach((a) => {
-          newAttendanceData.set(a.teilnehmerId, {
-            anwesend: a.anwesend,
-            entschuldigt: a.entschuldigt,
-            bemerkung: a.bemerkung || '',
-          });
+    enabled: !!selectedKurs,
+  });
+
+  // Update attendance data when anwesenheit changes
+  useEffect(() => {
+    if (anwesenheit) {
+      const newAttendanceData = new Map();
+      anwesenheit.forEach((a: Anwesenheit) => {
+        newAttendanceData.set(a.teilnehmerId, {
+          anwesend: a.anwesend,
+          entschuldigt: a.entschuldigt,
+          bemerkung: a.bemerkung || '',
         });
-        setAttendanceData(newAttendanceData);
-      },
+      });
+      setAttendanceData(newAttendanceData);
     }
-  );
+  }, [anwesenheit]);
 
-  // Fetch participants for selected course
-  const { data: teilnehmer } = useQuery(
-    ['kursTeilnehmer', selectedKurs],
-    () => kursService.getTeilnehmerInKurs(selectedKurs!),
-    {
-      enabled: !!selectedKurs,
-    }
-  );
+  // Fetch participants for selected course - FIXED: v5 syntax
+  const { data: teilnehmer } = useQuery({
+    queryKey: ['kursTeilnehmer', selectedKurs],
+    queryFn: () => kursService.getTeilnehmerInKurs(selectedKurs!),
+    enabled: !!selectedKurs,
+  });
 
-  // Save attendance mutation
-  const saveMutation = useMutation(
-    (data: BulkAnwesenheitDto) => anwesenheitService.createBulk(data),
-    {
-      onSuccess: () => {
-        toast.success('Anwesenheit erfolgreich gespeichert');
-        queryClient.invalidateQueries(['anwesenheit']);
-      },
-      onError: () => {
-        toast.error('Fehler beim Speichern der Anwesenheit');
-      },
-    }
-  );
+  // Save attendance mutation - FIXED: v5 syntax
+  const saveMutation = useMutation({
+    mutationFn: (data: BulkAnwesenheitDto) => anwesenheitService.createBulk(data),
+    onSuccess: () => {
+      toast.success('Anwesenheit erfolgreich gespeichert');
+      queryClient.invalidateQueries({ queryKey: ['anwesenheit'] }); // FIXED: object syntax
+    },
+    onError: () => {
+      toast.error('Fehler beim Speichern der Anwesenheit');
+    },
+  });
 
   const handleAttendanceChange = (
     teilnehmerId: number,
@@ -106,7 +102,7 @@ const AnwesenheitPage: React.FC = () => {
   const handleSave = () => {
     if (!selectedKurs || !teilnehmer) return;
 
-    const attendanceRecords = teilnehmer.map((t) => {
+    const attendanceRecords = teilnehmer.map((t: Teilnehmer) => {
       const data = attendanceData.get(t.id) || {
         anwesend: true,
         entschuldigt: false,
@@ -134,7 +130,7 @@ const AnwesenheitPage: React.FC = () => {
     let excused = 0;
     let absent = 0;
 
-    teilnehmer.forEach((t) => {
+    teilnehmer.forEach((t: Teilnehmer) => {
       const data = attendanceData.get(t.id);
       if (data?.anwesend) {
         present++;
@@ -166,7 +162,7 @@ const AnwesenheitPage: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Bitte wählen...</option>
-              {kurse?.map((kurs) => (
+              {kurse?.map((kurs: Kurs) => (
                 <option key={kurs.id} value={kurs.id}>
                   {kurs.kursName} - {kurs.trainerName}
                 </option>
@@ -217,10 +213,10 @@ const AnwesenheitPage: React.FC = () => {
             </div>
             <button
               onClick={handleSave}
-              disabled={saveMutation.isLoading || !teilnehmer?.length}
+              disabled={saveMutation.isPending || !teilnehmer?.length} // FIXED: isPending instead of isLoading
               className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
-              {saveMutation.isLoading ? (
+              {saveMutation.isPending ? ( // FIXED: isPending instead of isLoading
                 <Loader className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <Save className="w-4 h-4 mr-2" />
@@ -256,7 +252,7 @@ const AnwesenheitPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {teilnehmer?.map((t) => {
+                {teilnehmer?.map((t: Teilnehmer) => {
                   const data = attendanceData.get(t.id) || {
                     anwesend: true,
                     entschuldigt: false,

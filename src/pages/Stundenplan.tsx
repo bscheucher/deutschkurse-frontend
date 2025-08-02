@@ -7,6 +7,7 @@ import { Calendar, Clock, MapPin, User, Filter, ChevronLeft, ChevronRight } from
 import kursService from '../services/kursService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import StatusBadge from '../components/common/StatusBadge';
+import { Kurs } from '../types/kurs.types';
 
 interface ScheduleEntry {
   id: number;
@@ -27,14 +28,12 @@ const Stundenplan: React.FC = () => {
   const [filterTrainer, setFilterTrainer] = useState<string>('all');
   const [filterRoom, setFilterRoom] = useState<string>('all');
 
-  // Fetch courses to generate schedule
-  const { data: kurse, isLoading } = useQuery(
-    ['kurse', 'laufend'],
-    () => kursService.getAllKurse(),
-    {
-      select: (data) => data.filter(k => k.status === 'laufend' || k.status === 'geplant')
-    }
-  );
+  // FIXED: React Query v5 syntax - Fetch courses to generate schedule
+  const { data: kurse, isLoading } = useQuery({
+    queryKey: ['kurse', 'laufend'],
+    queryFn: () => kursService.getAllKurse(),
+    select: (data: Kurs[]) => data.filter(k => k.status === 'laufend' || k.status === 'geplant')
+  });
 
   // Mock schedule data generation from courses
   const generateScheduleData = (): ScheduleEntry[] => {
@@ -48,7 +47,7 @@ const Stundenplan: React.FC = () => {
       { start: '17:00', end: '20:00' }
     ];
 
-    kurse.forEach((kurs, index) => {
+    kurse.forEach((kurs: Kurs, index: number) => {
       // Assign courses to different weekdays and time slots
       const dayIndex = index % weekdays.length;
       const slotIndex = Math.floor(index / weekdays.length) % timeSlots.length;
@@ -73,15 +72,15 @@ const Stundenplan: React.FC = () => {
   const scheduleData = generateScheduleData();
 
   // Filter schedule data
-  const filteredSchedule = scheduleData.filter(entry => {
+  const filteredSchedule = scheduleData.filter((entry: ScheduleEntry) => {
     const matchesTrainer = filterTrainer === 'all' || entry.trainerName === filterTrainer;
     const matchesRoom = filterRoom === 'all' || entry.kursraumName === filterRoom;
     return matchesTrainer && matchesRoom;
   });
 
   // Get unique trainers and rooms for filters
-  const trainers = [...new Set(scheduleData.map(s => s.trainerName))];
-  const rooms = [...new Set(scheduleData.map(s => s.kursraumName))];
+  const trainers = [...new Set(scheduleData.map((s: ScheduleEntry) => s.trainerName))];
+  const rooms = [...new Set(scheduleData.map((s: ScheduleEntry) => s.kursraumName))];
 
   const weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
   const timeSlots = Array.from({ length: 12 }, (_, i) => {
@@ -89,8 +88,8 @@ const Stundenplan: React.FC = () => {
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 
-  const getScheduleForDayAndTime = (day: string, time: string) => {
-    return filteredSchedule.filter(entry => 
+  const getScheduleForDayAndTime = (day: string, time: string): ScheduleEntry[] => {
+    return filteredSchedule.filter((entry: ScheduleEntry) => 
       entry.wochentag === day && 
       entry.startzeit <= time && 
       entry.endzeit > time
@@ -149,7 +148,7 @@ const Stundenplan: React.FC = () => {
                   className="text-sm px-3 py-1 border border-gray-300 rounded-md"
                 >
                   <option value="all">Alle Trainer</option>
-                  {trainers.map(trainer => (
+                  {trainers.map((trainer: string) => (
                     <option key={trainer} value={trainer}>{trainer}</option>
                   ))}
                 </select>
@@ -160,7 +159,7 @@ const Stundenplan: React.FC = () => {
                 className="text-sm px-3 py-1 border border-gray-300 rounded-md"
               >
                 <option value="all">Alle Räume</option>
-                {rooms.map(room => (
+                {rooms.map((room: string) => (
                   <option key={room} value={room}>{room}</option>
                 ))}
               </select>
@@ -200,7 +199,7 @@ const Stundenplan: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Zeit
                 </th>
-                {weekdays.map(day => (
+                {weekdays.map((day: string) => (
                   <th key={day} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {day}
                   </th>
@@ -208,16 +207,16 @@ const Stundenplan: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {timeSlots.map(time => (
+              {timeSlots.map((time: string) => (
                 <tr key={time}>
                   <td className="px-4 py-2 text-sm text-gray-500 font-medium whitespace-nowrap">
                     {time}
                   </td>
-                  {weekdays.map(day => {
+                  {weekdays.map((day: string) => {
                     const entries = getScheduleForDayAndTime(day, time);
                     return (
                       <td key={`${day}-${time}`} className="px-4 py-2 relative">
-                        {entries.map(entry => (
+                        {entries.map((entry: ScheduleEntry) => (
                           <div
                             key={entry.id}
                             className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md"

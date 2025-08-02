@@ -14,6 +14,8 @@ import teilnehmerService from '../services/teilnehmerService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import StatusBadge from '../components/common/StatusBadge';
 import Modal from '../components/common/Modal';
+import { Kurs } from '../types/kurs.types';
+import { Teilnehmer } from '../types/teilnehmer.types';
 
 const KursDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,52 +24,53 @@ const KursDetails: React.FC = () => {
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const [selectedTeilnehmer, setSelectedTeilnehmer] = useState<number | null>(null);
 
-  const { data: kurs, isLoading: kursLoading } = useQuery(
-    ['kurs', id],
-    () => kursService.getKursById(Number(id)),
-    { enabled: !!id }
-  );
+  // FIXED: React Query v5 syntax
+  const { data: kurs, isLoading: kursLoading } = useQuery({
+    queryKey: ['kurs', id],
+    queryFn: () => kursService.getKursById(Number(id)),
+    enabled: !!id
+  });
 
-  const { data: teilnehmerInKurs, isLoading: teilnehmerLoading } = useQuery(
-    ['kursTeilnehmer', id],
-    () => kursService.getTeilnehmerInKurs(Number(id)),
-    { enabled: !!id }
-  );
+  // FIXED: React Query v5 syntax
+  const { data: teilnehmerInKurs, isLoading: teilnehmerLoading } = useQuery({
+    queryKey: ['kursTeilnehmer', id],
+    queryFn: () => kursService.getTeilnehmerInKurs(Number(id)),
+    enabled: !!id
+  });
 
-  const { data: alleTeilnehmer } = useQuery(
-    'teilnehmer',
-    teilnehmerService.getAllTeilnehmer
-  );
+  // FIXED: React Query v5 syntax
+  const { data: alleTeilnehmer } = useQuery({
+    queryKey: ['teilnehmer'],
+    queryFn: teilnehmerService.getAllTeilnehmer
+  });
 
-  const enrollMutation = useMutation(
-    (teilnehmerId: number) => kursService.enrollTeilnehmer(teilnehmerId, Number(id)),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['kursTeilnehmer', id]);
-        queryClient.invalidateQueries(['kurs', id]);
-        toast.success('Teilnehmer erfolgreich eingeschrieben');
-        setShowEnrollModal(false);
-        setSelectedTeilnehmer(null);
-      },
-      onError: () => {
-        toast.error('Fehler beim Einschreiben des Teilnehmers');
-      }
+  // FIXED: React Query v5 mutation syntax
+  const enrollMutation = useMutation({
+    mutationFn: (teilnehmerId: number) => kursService.enrollTeilnehmer(teilnehmerId, Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kursTeilnehmer', id] }); // FIXED: object syntax
+      queryClient.invalidateQueries({ queryKey: ['kurs', id] }); // FIXED: object syntax
+      toast.success('Teilnehmer erfolgreich eingeschrieben');
+      setShowEnrollModal(false);
+      setSelectedTeilnehmer(null);
+    },
+    onError: () => {
+      toast.error('Fehler beim Einschreiben des Teilnehmers');
     }
-  );
+  });
 
-  const removeMutation = useMutation(
-    (teilnehmerId: number) => kursService.removeTeilnehmer(Number(id), teilnehmerId),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['kursTeilnehmer', id]);
-        queryClient.invalidateQueries(['kurs', id]);
-        toast.success('Teilnehmer erfolgreich entfernt');
-      },
-      onError: () => {
-        toast.error('Fehler beim Entfernen des Teilnehmers');
-      }
+  // FIXED: React Query v5 mutation syntax
+  const removeMutation = useMutation({
+    mutationFn: (teilnehmerId: number) => kursService.removeTeilnehmer(Number(id), teilnehmerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kursTeilnehmer', id] }); // FIXED: object syntax
+      queryClient.invalidateQueries({ queryKey: ['kurs', id] }); // FIXED: object syntax
+      toast.success('Teilnehmer erfolgreich entfernt');
+    },
+    onError: () => {
+      toast.error('Fehler beim Entfernen des Teilnehmers');
     }
-  );
+  });
 
   const handleEnroll = () => {
     if (selectedTeilnehmer) {
@@ -84,9 +87,14 @@ const KursDetails: React.FC = () => {
   if (kursLoading) return <LoadingSpinner />;
   if (!kurs) return <div>Kurs nicht gefunden</div>;
 
+  // Cast data to proper types and fix property access
+  const kursData = kurs as Kurs;
+  const teilnehmerList = teilnehmerInKurs as Teilnehmer[] | undefined;
+  const allTeilnehmerList = alleTeilnehmer as Teilnehmer[] | undefined;
+
   // Filter out already enrolled participants
-  const enrolledIds = teilnehmerInKurs?.map(t => t.id) || [];
-  const availableTeilnehmer = alleTeilnehmer?.filter(t => 
+  const enrolledIds = teilnehmerList?.map((t: Teilnehmer) => t.id) || [];
+  const availableTeilnehmer = allTeilnehmerList?.filter((t: Teilnehmer) => 
     !enrolledIds.includes(t.id) && t.aktiv
   ) || [];
 
@@ -103,11 +111,11 @@ const KursDetails: React.FC = () => {
         
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{kurs.kursName}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{kursData.kursName}</h1>
             <div className="mt-2 flex items-center space-x-4">
-              <StatusBadge status={kurs.status} />
+              <StatusBadge status={kursData.status} />
               <span className="text-sm text-gray-500">
-                {kurs.kurstypName} • {kurs.kursraumName}
+                {kursData.kurstypName} • {kursData.kursraumName}
               </span>
             </div>
           </div>
@@ -139,7 +147,7 @@ const KursDetails: React.FC = () => {
                 <dt className="text-sm font-medium text-gray-500">Trainer</dt>
                 <dd className="mt-1 text-sm text-gray-900 flex items-center">
                   <User className="w-4 h-4 mr-2 text-gray-400" />
-                  {kurs.trainerName}
+                  {kursData.trainerName}
                 </dd>
               </div>
               
@@ -147,7 +155,7 @@ const KursDetails: React.FC = () => {
                 <dt className="text-sm font-medium text-gray-500">Kursraum</dt>
                 <dd className="mt-1 text-sm text-gray-900 flex items-center">
                   <MapPin className="w-4 h-4 mr-2 text-gray-400" />
-                  {kurs.kursraumName}
+                  {kursData.kursraumName}
                 </dd>
               </div>
               
@@ -155,8 +163,8 @@ const KursDetails: React.FC = () => {
                 <dt className="text-sm font-medium text-gray-500">Zeitraum</dt>
                 <dd className="mt-1 text-sm text-gray-900 flex items-center">
                   <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                  {format(new Date(kurs.startdatum), 'dd. MMM yyyy', { locale: de })} - 
-                  {format(new Date(kurs.enddatum), 'dd. MMM yyyy', { locale: de })}
+                  {format(new Date(kursData.startdatum), 'dd. MMM yyyy', { locale: de })} - 
+                  {format(new Date(kursData.enddatum), 'dd. MMM yyyy', { locale: de })}
                 </dd>
               </div>
               
@@ -164,15 +172,15 @@ const KursDetails: React.FC = () => {
                 <dt className="text-sm font-medium text-gray-500">Teilnehmer</dt>
                 <dd className="mt-1 text-sm text-gray-900 flex items-center">
                   <Users className="w-4 h-4 mr-2 text-gray-400" />
-                  {kurs.aktuelleTeilnehmer} / {kurs.maxTeilnehmer}
+                  {kursData.aktuelleTeilnehmer} / {kursData.maxTeilnehmer}
                 </dd>
               </div>
             </dl>
             
-            {kurs.beschreibung && (
+            {kursData.beschreibung && (
               <div className="mt-6">
                 <dt className="text-sm font-medium text-gray-500">Beschreibung</dt>
-                <dd className="mt-1 text-sm text-gray-900">{kurs.beschreibung}</dd>
+                <dd className="mt-1 text-sm text-gray-900">{kursData.beschreibung}</dd>
               </div>
             )}
           </div>
@@ -182,9 +190,9 @@ const KursDetails: React.FC = () => {
             <div className="p-6 border-b">
               <div className="flex justify-between items-center">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Teilnehmer ({teilnehmerInKurs?.length || 0})
+                  Teilnehmer ({teilnehmerList?.length || 0})
                 </h2>
-                {kurs.aktuelleTeilnehmer < kurs.maxTeilnehmer && (
+                {kursData.aktuelleTeilnehmer < kursData.maxTeilnehmer && (
                   <button
                     onClick={() => setShowEnrollModal(true)}
                     className="flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
@@ -198,7 +206,7 @@ const KursDetails: React.FC = () => {
             
             {teilnehmerLoading ? (
               <LoadingSpinner />
-            ) : teilnehmerInKurs && teilnehmerInKurs.length > 0 ? (
+            ) : teilnehmerList && teilnehmerList.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -218,7 +226,7 @@ const KursDetails: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {teilnehmerInKurs.map((teilnehmer) => (
+                    {teilnehmerList.map((teilnehmer: Teilnehmer) => (
                       <tr key={teilnehmer.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
@@ -313,7 +321,7 @@ const KursDetails: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             >
               <option value="">Bitte wählen...</option>
-              {availableTeilnehmer.map((teilnehmer) => (
+              {availableTeilnehmer.map((teilnehmer: Teilnehmer) => (
                 <option key={teilnehmer.id} value={teilnehmer.id}>
                   {teilnehmer.vorname} {teilnehmer.nachname} ({teilnehmer.email})
                 </option>
@@ -333,10 +341,10 @@ const KursDetails: React.FC = () => {
             </button>
             <button
               onClick={handleEnroll}
-              disabled={!selectedTeilnehmer || enrollMutation.isLoading}
+              disabled={!selectedTeilnehmer || enrollMutation.isPending} // FIXED: isPending instead of isLoading
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
-              {enrollMutation.isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
+              {enrollMutation.isPending ? 'Wird hinzugefügt...' : 'Hinzufügen'} {/* FIXED: isPending */}
             </button>
           </div>
         </div>

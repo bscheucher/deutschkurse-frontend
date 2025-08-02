@@ -13,7 +13,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import StatusBadge from '../components/common/StatusBadge';
 import Modal from '../components/common/Modal';
 import KursForm from '../components/forms/KursForm';
-import { Kurs } from '../types/kurs.types';
+import { Kurs, CreateKursDto } from '../types/kurs.types';
 
 const Kurse: React.FC = () => {
   const navigate = useNavigate();
@@ -23,56 +23,70 @@ const Kurse: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const { data: kurse, isLoading } = useQuery(['kurse'], kursService.getAllKurse);
+  // FIXED: React Query v5 syntax
+  const { data: kurse, isLoading } = useQuery({
+    queryKey: ['kurse'],
+    queryFn: kursService.getAllKurse
+  });
 
-  const createMutation = useMutation(
-    (data: Partial<Kurs>) => kursService.createKurs(data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['kurse']);
-        toast.success('Kurs erfolgreich erstellt');
-        setShowForm(false);
-      },
-      onError: () => {
-        toast.error('Fehler beim Erstellen des Kurses');
-      }
+  // FIXED: React Query v5 mutation syntax
+  const createMutation = useMutation({
+    mutationFn: (data: CreateKursDto) => kursService.createKurs(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kurse'] }); // FIXED: object syntax
+      toast.success('Kurs erfolgreich erstellt');
+      setShowForm(false);
+    },
+    onError: () => {
+      toast.error('Fehler beim Erstellen des Kurses');
     }
-  );
+  });
 
-  const updateMutation = useMutation(
-    ({ id, data }: { id: number; data: Partial<Kurs> }) => 
+  // FIXED: React Query v5 mutation syntax
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<CreateKursDto> }) => 
       kursService.updateKurs(id, data),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['kurse']);
-        toast.success('Kurs erfolgreich aktualisiert');
-        setEditingKurs(null);
-        setShowForm(false);
-      },
-      onError: () => {
-        toast.error('Fehler beim Aktualisieren des Kurses');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kurse'] }); // FIXED: object syntax
+      toast.success('Kurs erfolgreich aktualisiert');
+      setEditingKurs(null);
+      setShowForm(false);
+    },
+    onError: () => {
+      toast.error('Fehler beim Aktualisieren des Kurses');
     }
-  );
+  });
 
-  const deleteMutation = useMutation(
-    (id: number) => kursService.deleteKurs(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['kurse']);
-        toast.success('Kurs erfolgreich gelöscht');
-      },
-      onError: () => {
-        toast.error('Fehler beim Löschen des Kurses');
-      }
+  // FIXED: React Query v5 mutation syntax
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => kursService.deleteKurs(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kurse'] }); // FIXED: object syntax
+      toast.success('Kurs erfolgreich gelöscht');
+    },
+    onError: () => {
+      toast.error('Fehler beim Löschen des Kurses');
     }
-  );
+  });
 
   const handleSubmit = (data: Partial<Kurs>) => {
+    // Convert Partial<Kurs> to CreateKursDto
+    const kursData: CreateKursDto = {
+      kursName: data.kursName!,
+      kurstypId: data.kurstypId!,
+      kursraumId: data.kursraumId!,
+      trainerId: data.trainerId!,
+      startdatum: data.startdatum!,
+      enddatum: data.enddatum!,
+      maxTeilnehmer: data.maxTeilnehmer!,
+      status: data.status!,
+      beschreibung: data.beschreibung
+    };
+
     if (editingKurs) {
-      updateMutation.mutate({ id: editingKurs.id, data });
+      updateMutation.mutate({ id: editingKurs.id, data: kursData });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(kursData);
     }
   };
 
@@ -82,7 +96,8 @@ const Kurse: React.FC = () => {
     }
   };
 
-  const filteredKurse = kurse?.filter(kurs => {
+  // FIXED: Type the kurse array properly
+  const filteredKurse = kurse?.filter((kurs: Kurs) => {
     const matchesSearch = kurs.kursName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          kurs.trainerName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || kurs.status === statusFilter;
@@ -173,7 +188,7 @@ const Kurse: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredKurse?.map((kurs) => (
+              {filteredKurse?.map((kurs: Kurs) => (
                 <tr key={kurs.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
@@ -272,7 +287,7 @@ const Kurse: React.FC = () => {
             setShowForm(false);
             setEditingKurs(null);
           }}
-          isLoading={createMutation.isLoading || updateMutation.isLoading}
+          isLoading={createMutation.isPending || updateMutation.isPending} // FIXED: isPending instead of isLoading
         />
       </Modal>
     </div>
