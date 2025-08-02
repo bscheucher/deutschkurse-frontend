@@ -1,5 +1,6 @@
 import api from './api';
 import { Kurs, CreateKursDto, KursStatus } from '../types/kurs.types';
+import { Teilnehmer } from '../types/teilnehmer.types';
 
 class KursService {
   async getAllKurse(): Promise<Kurs[]> {
@@ -14,6 +15,11 @@ class KursService {
 
   async getKurseByStatus(status: KursStatus): Promise<Kurs[]> {
     const response = await api.get<Kurs[]>(`/kurse/status/${status}`);
+    return response.data;
+  }
+
+  async getTeilnehmerInKurs(kursId: number): Promise<Teilnehmer[]> {
+    const response = await api.get<Teilnehmer[]>(`/kurse/${kursId}/teilnehmer`);
     return response.data;
   }
 

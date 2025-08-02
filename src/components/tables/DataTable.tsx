@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
 interface Column<T> {
-  key: keyof T | string;
+  key: string; // Changed from keyof T | string to just string
   header: string;
   sortable?: boolean;
   render?: (item: T) => React.ReactNode;
@@ -61,8 +61,8 @@ function DataTable<T extends Record<string, any>>({
     // Sort
     if (sortConfig.key && sortConfig.direction) {
       processedData.sort((a, b) => {
-        const aValue = a[sortConfig.key as keyof T];
-        const bValue = b[sortConfig.key as keyof T];
+        const aValue = a[sortConfig.key as string];
+        const bValue = b[sortConfig.key as string];
 
         if (aValue === null || aValue === undefined) return 1;
         if (bValue === null || bValue === undefined) return -1;
@@ -155,7 +155,7 @@ function DataTable<T extends Record<string, any>>({
                     >
                       {column.render
                         ? column.render(item)
-                        : item[column.key as keyof T]}
+                        : item[column.key]}
                     </td>
                   ))}
                 </tr>

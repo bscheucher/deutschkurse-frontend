@@ -1,6 +1,6 @@
 // src/components/forms/KursForm.tsx
 import React, { useState, useEffect } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { de } from 'date-fns/locale';
@@ -37,7 +37,10 @@ const KursForm: React.FC<KursFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch available trainers
-  const { data: trainers } = useQuery('trainers', trainerService.getAllTrainer);
+  const { data: trainers } = useQuery({
+    queryKey: ['trainers'],
+    queryFn: trainerService.getAllTrainer
+  });
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -159,7 +162,7 @@ const KursForm: React.FC<KursFormProps> = ({
             onChange={(e) => handleChange('trainerId', Number(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
           >
-            {trainers?.map(trainer => (
+            {trainers?.map((trainer: any) => (
               <option key={trainer.id} value={trainer.id}>
                 {trainer.vorname} {trainer.nachname}
               </option>
