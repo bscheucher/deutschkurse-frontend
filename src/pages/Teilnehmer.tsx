@@ -43,9 +43,9 @@ const TeilnehmerPage: React.FC = () => {
 
   const filteredTeilnehmer = teilnehmer?.filter(t => {
     const matchesSearch = 
-      t.vorname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.nachname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.email.toLowerCase().includes(searchTerm.toLowerCase());
+      (t.vorname || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.nachname || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || 
       (statusFilter === 'aktiv' && t.aktiv) ||
       (statusFilter === 'inaktiv' && !t.aktiv);
