@@ -1,25 +1,19 @@
-// src/pages/Stundenplan.tsx
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Calendar, Clock, MapPin, User, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import kursService from '../services/kursService';
+import stundenplanService, { StundenplanEntry } from '../services/stundenplanService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import StatusBadge from '../components/common/StatusBadge';
 import { Kurs } from '../types/kurs.types';
 
-interface ScheduleEntry {
-  id: number;
-  kursId: number;
-  kursName: string;
+interface ScheduleEntry extends StundenplanEntry {
+  status: string;
   kurstypName: string;
   trainerName: string;
   kursraumName: string;
-  wochentag: string;
-  startzeit: string;
-  endzeit: string;
-  status: string;
 }
 
 const Stundenplan: React.FC = () => {
@@ -28,42 +22,39 @@ const Stundenplan: React.FC = () => {
   const [filterTrainer, setFilterTrainer] = useState<string>('all');
   const [filterRoom, setFilterRoom] = useState<string>('all');
 
-  // FIXED: React Query v5 syntax - Fetch courses to generate schedule
-  const { data: kurse, isLoading } = useQuery({
-    queryKey: ['kurse', 'laufend'],
+  // Fetch courses to get additional details
+  const { data: kurse, isLoading: kurseLoading } = useQuery({
+    queryKey: ['kurse', 'active'],
     queryFn: () => kursService.getAllKurse(),
     select: (data: Kurs[]) => data.filter(k => k.status === 'laufend' || k.status === 'geplant')
   });
 
-  // Mock schedule data generation from courses
+  // Fetch ALL schedule entries
+  const { data: stundenplanEntries, isLoading: stundenplanLoading } = useQuery({
+    queryKey: ['stundenplan'],
+    queryFn: stundenplanService.getAllStundenplan,
+    select: (data: StundenplanEntry[]) => data.filter(s => s.aktiv)
+  });
+
+  const isLoading = kurseLoading || stundenplanLoading;
+
+  // Combine schedule entries with course details
   const generateScheduleData = (): ScheduleEntry[] => {
-    if (!kurse) return [];
+    if (!kurse || !stundenplanEntries) return [];
 
     const scheduleEntries: ScheduleEntry[] = [];
-    const weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
-    const timeSlots = [
-      { start: '09:00', end: '12:00' },
-      { start: '13:00', end: '16:00' },
-      { start: '17:00', end: '20:00' }
-    ];
 
-    kurse.forEach((kurs: Kurs, index: number) => {
-      // Assign courses to different weekdays and time slots
-      const dayIndex = index % weekdays.length;
-      const slotIndex = Math.floor(index / weekdays.length) % timeSlots.length;
-
-      scheduleEntries.push({
-        id: kurs.id,
-        kursId: kurs.id,
-        kursName: kurs.kursName,
-        kurstypName: kurs.kurstypName,
-        trainerName: kurs.trainerName,
-        kursraumName: kurs.kursraumName,
-        wochentag: weekdays[dayIndex],
-        startzeit: timeSlots[slotIndex].start,
-        endzeit: timeSlots[slotIndex].end,
-        status: kurs.status
-      });
+    stundenplanEntries.forEach((stundenplan: StundenplanEntry) => {
+      const kurs = kurse.find(k => k.id === stundenplan.kursId);
+      if (kurs) {
+        scheduleEntries.push({
+          ...stundenplan,
+          status: kurs.status,
+          kurstypName: kurs.kurstypName,
+          trainerName: kurs.trainerName,
+          kursraumName: kurs.kursraumName
+        });
+      }
     });
 
     return scheduleEntries;
@@ -83,17 +74,22 @@ const Stundenplan: React.FC = () => {
   const rooms = [...new Set(scheduleData.map((s: ScheduleEntry) => s.kursraumName))];
 
   const weekdays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
-  const timeSlots = Array.from({ length: 12 }, (_, i) => {
-    const hour = i + 8;
+  const timeSlots = Array.from({ length: 14 }, (_, i) => {
+    const hour = i + 7; // Start from 07:00
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 
   const getScheduleForDayAndTime = (day: string, time: string): ScheduleEntry[] => {
-    return filteredSchedule.filter((entry: ScheduleEntry) => 
-      entry.wochentag === day && 
-      entry.startzeit <= time && 
-      entry.endzeit > time
-    );
+    return filteredSchedule.filter((entry: ScheduleEntry) => {
+      // Convert time strings to comparable format (HH:MM)
+      const entryStartTime = entry.startzeit.substring(0, 5); // Get HH:MM from HH:MM:SS
+      const entryEndTime = entry.endzeit.substring(0, 5);
+      const currentTime = time.substring(0, 5);
+      
+      return entry.wochentag === day && 
+             entryStartTime <= currentTime && 
+             entryEndTime > currentTime;
+    });
   };
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
@@ -196,7 +192,7 @@ const Stundenplan: React.FC = () => {
           <table className="min-w-full">
             <thead>
               <tr className="bg-gray-50">
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                   Zeit
                 </th>
                 {weekdays.map((day: string) => (
@@ -209,43 +205,51 @@ const Stundenplan: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {timeSlots.map((time: string) => (
                 <tr key={time}>
-                  <td className="px-4 py-2 text-sm text-gray-500 font-medium whitespace-nowrap">
+                  <td className="px-4 py-2 text-sm text-gray-500 font-medium whitespace-nowrap bg-gray-50">
                     {time}
                   </td>
                   {weekdays.map((day: string) => {
                     const entries = getScheduleForDayAndTime(day, time);
                     return (
-                      <td key={`${day}-${time}`} className="px-4 py-2 relative">
+                      <td key={`${day}-${time}`} className="px-2 py-2 relative min-h-[60px] align-top">
                         {entries.map((entry: ScheduleEntry) => (
                           <div
                             key={entry.id}
-                            className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md"
+                            className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 cursor-pointer transition-colors"
+                            title={`${entry.kursName} - ${entry.trainerName} - ${entry.kursraumName}`}
                           >
                             <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
                                   {entry.kursName}
                                 </p>
-                                <p className="text-xs text-gray-600 mt-1">
+                                <p className="text-xs text-gray-600 mt-1 truncate">
                                   {entry.kurstypName}
                                 </p>
                                 <div className="mt-2 space-y-1">
-                                  <div className="flex items-center text-xs text-gray-500">
-                                    <User className="w-3 h-3 mr-1" />
-                                    {entry.trainerName}
+                                  <div className="flex items-center text-xs text-gray-500 truncate">
+                                    <User className="w-3 h-3 mr-1 flex-shrink-0" />
+                                    <span className="truncate">{entry.trainerName}</span>
+                                  </div>
+                                  <div className="flex items-center text-xs text-gray-500 truncate">
+                                    <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                                    <span className="truncate">{entry.kursraumName}</span>
                                   </div>
                                   <div className="flex items-center text-xs text-gray-500">
-                                    <MapPin className="w-3 h-3 mr-1" />
-                                    {entry.kursraumName}
-                                  </div>
-                                  <div className="flex items-center text-xs text-gray-500">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    {entry.startzeit} - {entry.endzeit}
+                                    <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
+                                    <span>{entry.startzeit.substring(0, 5)} - {entry.endzeit.substring(0, 5)}</span>
                                   </div>
                                 </div>
                               </div>
-                              <StatusBadge status={entry.status} variant="kurs" />
+                              <div className="ml-2 flex-shrink-0">
+                                <StatusBadge status={entry.status} variant="kurs" />
+                              </div>
                             </div>
+                            {entry.bemerkungen && (
+                              <div className="mt-1 text-xs text-gray-500 italic">
+                                {entry.bemerkungen}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </td>
@@ -255,6 +259,35 @@ const Stundenplan: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Debug Info - Shows real data */}
+      <div className="bg-gray-50 rounded-lg p-4 mb-6">
+        <h3 className="text-sm font-medium text-gray-900 mb-2">Schedule Info</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs text-gray-600">
+          <div>
+            <strong>Total schedule entries:</strong> {scheduleData.length}
+          </div>
+          <div>
+            <strong>Filtered entries:</strong> {filteredSchedule.length}
+          </div>
+          <div>
+            <strong>Course ID=3 appears on:</strong> {
+              scheduleData
+                .filter(s => s.kursId === 3)
+                .map(s => s.wochentag)
+                .join(', ') || 'None'
+            }
+          </div>
+          <div>
+            <strong>Course ID=3 times:</strong> {
+              scheduleData
+                .filter(s => s.kursId === 3)
+                .map(s => `${s.startzeit.substring(0, 5)}-${s.endzeit.substring(0, 5)}`)
+                .join(', ') || 'None'
+            }
+          </div>
         </div>
       </div>
 
