@@ -3,45 +3,83 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import toast from 'react-hot-toast';
-import { Calendar, Check, X, Save, Loader } from 'lucide-react';
+import { 
+  Calendar, Check, X, Save, Loader, 
+  Users, AlertCircle, Info 
+} from 'lucide-react';
 import anwesenheitService from '../services/anwesenheitService';
 import kursService from '../services/kursService';
 import { Anwesenheit, BulkAnwesenheitDto } from '../types/anwesenheit.types';
 import { Kurs } from '../types/kurs.types';
 import { Teilnehmer } from '../types/teilnehmer.types';
+import LoadingSpinner from '../components/common/LoadingSpinner';
+
+interface AttendanceData {
+  anwesend: boolean;
+  entschuldigt: boolean;
+  bemerkung: string;
+}
 
 const AnwesenheitPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [selectedKurs, setSelectedKurs] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [attendanceData, setAttendanceData] = useState<Map<number, {
-    anwesend: boolean;
-    entschuldigt: boolean;
-    bemerkung: string;
-  }>>(new Map());
+  const [attendanceData, setAttendanceData] = useState<Map<number, AttendanceData>>(new Map());
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Fetch courses - FIXED: v5 syntax
-  const { data: kurse, isLoading: kurseLoading } = useQuery({
-    queryKey: ['kurse'],
-    queryFn: () => kursService.getAllKurse(),
-    select: (data: Kurs[]) => data.filter(k => k.status === 'laufend'),
+  // Fetch active courses
+  const { data: kurse, isLoading: kurseLoading, error: kurseError } = useQuery({
+    queryKey: ['kurse', 'active'],
+    queryFn: async () => {
+      const allKurse = await kursService.getAllKurse();
+      return allKurse.filter(k => k.status === 'laufend' || k.status === 'geplant');
+    },
   });
 
-  // Fetch attendance for selected course and date - FIXED: v5 syntax
-  const { data: anwesenheit, isLoading: anwesenheitLoading, refetch } = useQuery({
+  // Fetch attendance for selected course and date
+  const { 
+    data: anwesenheit, 
+    isLoading: anwesenheitLoading,
+    error: anwesenheitError,
+    refetch: refetchAttendance 
+  } = useQuery({
     queryKey: ['anwesenheit', selectedKurs, format(selectedDate, 'yyyy-MM-dd')],
     queryFn: () => anwesenheitService.getByKursAndDatum(
       selectedKurs!,
       format(selectedDate, 'yyyy-MM-dd')
     ),
     enabled: !!selectedKurs,
+    retry: 1,
+  });
+
+  // Fetch participants for selected course
+  const { 
+    data: teilnehmer,
+    isLoading: teilnehmerLoading,
+    error: teilnehmerError
+  } = useQuery({
+    queryKey: ['kursTeilnehmer', selectedKurs],
+    queryFn: () => kursService.getTeilnehmerInKurs(selectedKurs!),
+    enabled: !!selectedKurs,
   });
 
   // Update attendance data when anwesenheit changes
   useEffect(() => {
-    if (anwesenheit) {
-      const newAttendanceData = new Map();
+    if (anwesenheit && teilnehmer) {
+      const newAttendanceData = new Map<number, AttendanceData>();
+      
+      // Initialize with default values for all participants
+      teilnehmer.forEach((t: Teilnehmer) => {
+        newAttendanceData.set(t.id, {
+          anwesend: true,
+          entschuldigt: false,
+          bemerkung: '',
+        });
+      });
+
+      // Override with existing attendance records
       anwesenheit.forEach((a: Anwesenheit) => {
         newAttendanceData.set(a.teilnehmerId, {
           anwesend: a.anwesend,
@@ -49,26 +87,35 @@ const AnwesenheitPage: React.FC = () => {
           bemerkung: a.bemerkung || '',
         });
       });
+
       setAttendanceData(newAttendanceData);
+      setHasUnsavedChanges(false);
+    } else if (teilnehmer && !anwesenheit) {
+      // No attendance records exist yet, initialize with defaults
+      const newAttendanceData = new Map<number, AttendanceData>();
+      teilnehmer.forEach((t: Teilnehmer) => {
+        newAttendanceData.set(t.id, {
+          anwesend: true,
+          entschuldigt: false,
+          bemerkung: '',
+        });
+      });
+      setAttendanceData(newAttendanceData);
+      setHasUnsavedChanges(false);
     }
-  }, [anwesenheit]);
+  }, [anwesenheit, teilnehmer]);
 
-  // Fetch participants for selected course - FIXED: v5 syntax
-  const { data: teilnehmer } = useQuery({
-    queryKey: ['kursTeilnehmer', selectedKurs],
-    queryFn: () => kursService.getTeilnehmerInKurs(selectedKurs!),
-    enabled: !!selectedKurs,
-  });
-
-  // Save attendance mutation - FIXED: v5 syntax
+  // Save attendance mutation
   const saveMutation = useMutation({
     mutationFn: (data: BulkAnwesenheitDto) => anwesenheitService.createBulk(data),
     onSuccess: () => {
       toast.success('Anwesenheit erfolgreich gespeichert');
-      queryClient.invalidateQueries({ queryKey: ['anwesenheit'] }); // FIXED: object syntax
+      queryClient.invalidateQueries({ queryKey: ['anwesenheit'] });
+      setHasUnsavedChanges(false);
+      refetchAttendance();
     },
-    onError: () => {
-      toast.error('Fehler beim Speichern der Anwesenheit');
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Fehler beim Speichern der Anwesenheit');
     },
   });
 
@@ -83,24 +130,49 @@ const AnwesenheitPage: React.FC = () => {
       bemerkung: '',
     };
 
-    const updated = { ...current, [field]: value };
-    
-    // If marking as absent, ensure not marked as present
-    if (field === 'entschuldigt' && value === true) {
-      updated.anwesend = false;
-    }
-    // If marking as present, ensure not marked as excused
-    if (field === 'anwesend' && value === true) {
-      updated.entschuldigt = false;
+    const updated = { ...current };
+
+    if (field === 'anwesend') {
+      updated.anwesend = value as boolean;
+      if (value === true) {
+        updated.entschuldigt = false; // Can't be both present and excused
+      }
+    } else if (field === 'entschuldigt') {
+      updated.entschuldigt = value as boolean;
+      if (value === true) {
+        updated.anwesend = false; // Can't be both excused and present
+      }
+    } else if (field === 'bemerkung') {
+      updated.bemerkung = value as string;
     }
 
     const newData = new Map(attendanceData);
     newData.set(teilnehmerId, updated);
     setAttendanceData(newData);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleQuickAction = (action: 'all-present' | 'all-absent') => {
+    if (!teilnehmer) return;
+
+    const newData = new Map<number, AttendanceData>();
+    teilnehmer.forEach((t: Teilnehmer) => {
+      const current = attendanceData.get(t.id);
+      newData.set(t.id, {
+        anwesend: action === 'all-present',
+        entschuldigt: false,
+        bemerkung: current?.bemerkung || '',
+      });
+    });
+    setAttendanceData(newData);
+    setHasUnsavedChanges(true);
   };
 
   const handleSave = () => {
-    if (!selectedKurs || !teilnehmer) return;
+    if (!selectedKurs || !teilnehmer || teilnehmer.length === 0) {
+      toast.error('Bitte wählen Sie einen Kurs mit Teilnehmern aus');
+      return;
+    }
 
     const attendanceRecords = teilnehmer.map((t: Teilnehmer) => {
       const data = attendanceData.get(t.id) || {
@@ -110,7 +182,9 @@ const AnwesenheitPage: React.FC = () => {
       };
       return {
         teilnehmerId: t.id,
-        ...data,
+        anwesend: data.anwesend,
+        entschuldigt: data.entschuldigt,
+        bemerkung: data.bemerkung || '',
       };
     });
 
@@ -124,7 +198,7 @@ const AnwesenheitPage: React.FC = () => {
   };
 
   const getAttendanceStats = () => {
-    if (!teilnehmer) return { present: 0, excused: 0, absent: 0 };
+    if (!teilnehmer) return { present: 0, excused: 0, absent: 0, total: 0 };
 
     let present = 0;
     let excused = 0;
@@ -141,42 +215,72 @@ const AnwesenheitPage: React.FC = () => {
       }
     });
 
-    return { present, excused, absent };
+    return { present, excused, absent, total: teilnehmer.length };
   };
 
   const stats = getAttendanceStats();
+  const attendanceRate = stats.total > 0 
+    ? Math.round((stats.present / stats.total) * 100) 
+    : 0;
+
+  // Handle date change
+  const handleDateChange = (date: Date | null) => {
+    if (date) {
+      setSelectedDate(date);
+      setHasUnsavedChanges(false);
+    }
+  };
+
+  // Handle course change
+  const handleKursChange = (kursId: string) => {
+    setSelectedKurs(kursId ? Number(kursId) : null);
+    setHasUnsavedChanges(false);
+  };
+
+  // Get selected course details
+  const selectedKursDetails = kurse?.find((k: Kurs) => k.id === selectedKurs);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">Anwesenheit erfassen</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Anwesenheit erfassen</h1>
+        <p className="text-gray-600 mt-1">
+          Erfassen und verwalten Sie die Anwesenheit der Kursteilnehmer
+        </p>
+      </div>
 
+      {/* Selection Controls */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Kurs auswählen
+              Kurs auswählen *
             </label>
             <select
               value={selectedKurs || ''}
-              onChange={(e) => setSelectedKurs(Number(e.target.value))}
+              onChange={(e) => handleKursChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              disabled={kurseLoading}
             >
               <option value="">Bitte wählen...</option>
               {kurse?.map((kurs: Kurs) => (
                 <option key={kurs.id} value={kurs.id}>
-                  {kurs.kursName} - {kurs.trainerName}
+                  {kurs.kursName} - {kurs.trainerName} ({kurs.aktuelleTeilnehmer} Teilnehmer)
                 </option>
               ))}
             </select>
+            {kurseError && (
+              <p className="mt-1 text-sm text-red-600">Fehler beim Laden der Kurse</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Datum
+              Datum *
             </label>
             <DatePicker
               selected={selectedDate}
-              onChange={(date) => date && setSelectedDate(date)}
+              onChange={handleDateChange}
               dateFormat="dd.MM.yyyy"
               locale={de}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -195,7 +299,36 @@ const AnwesenheitPage: React.FC = () => {
           </div>
         </div>
 
-        {selectedKurs && (
+        {/* Course Info and Stats */}
+        {selectedKursDetails && (
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <Info className="w-4 h-4" />
+                <span>
+                  <strong>{selectedKursDetails.kursName}</strong> • 
+                  {selectedKursDetails.kurstypName} • 
+                  Raum: {selectedKursDetails.kursraumName}
+                </span>
+              </div>
+              
+              <div className="flex items-center space-x-4 mt-2 sm:mt-0">
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-600">
+                    {stats.total} Teilnehmer
+                  </span>
+                </div>
+                <div className="text-sm font-medium text-gray-900">
+                  Anwesenheitsrate: {attendanceRate}%
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Statistics Bar */}
+        {selectedKurs && teilnehmer && teilnehmer.length > 0 && (
           <div className="mt-6 flex items-center justify-between">
             <div className="flex space-x-6 text-sm">
               <div className="flex items-center">
@@ -211,100 +344,172 @@ const AnwesenheitPage: React.FC = () => {
                 <span>Abwesend: {stats.absent}</span>
               </div>
             </div>
-            <button
-              onClick={handleSave}
-              disabled={saveMutation.isPending || !teilnehmer?.length} // FIXED: isPending instead of isLoading
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saveMutation.isPending ? ( // FIXED: isPending instead of isLoading
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4 mr-2" />
+            
+            <div className="flex items-center space-x-2">
+              {hasUnsavedChanges && (
+                <span className="text-sm text-orange-600 flex items-center">
+                  <AlertCircle className="w-4 h-4 mr-1" />
+                  Ungespeicherte Änderungen
+                </span>
               )}
-              Speichern
-            </button>
+              <button
+                onClick={handleSave}
+                disabled={saveMutation.isPending || !teilnehmer?.length || !hasUnsavedChanges}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saveMutation.isPending ? (
+                  <Loader className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Speichern
+              </button>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Attendance Table */}
       {selectedKurs && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          {anwesenheitLoading ? (
+          {/* Quick Actions Bar */}
+          {teilnehmer && teilnehmer.length > 0 && (
+            <div className="p-4 bg-gray-50 border-b flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-700">Schnellaktionen:</h3>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handleQuickAction('all-present')}
+                  className="text-sm px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                >
+                  Alle anwesend
+                </button>
+                <button
+                  onClick={() => handleQuickAction('all-absent')}
+                  className="text-sm px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                >
+                  Alle abwesend
+                </button>
+              </div>
+            </div>
+          )}
+
+          {anwesenheitLoading || teilnehmerLoading ? (
+            <div className="p-8">
+              <LoadingSpinner text="Lade Teilnehmerdaten..." />
+            </div>
+          ) : teilnehmerError || anwesenheitError ? (
             <div className="p-8 text-center">
-              <Loader className="w-8 h-8 mx-auto animate-spin text-blue-500" />
+              <AlertCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
+              <p className="text-red-600">
+                Fehler beim Laden der Daten. Bitte versuchen Sie es später erneut.
+              </p>
+            </div>
+          ) : !teilnehmer || teilnehmer.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <Users className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+              <p>Keine Teilnehmer in diesem Kurs eingeschrieben</p>
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Teilnehmer
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Anwesend
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Entschuldigt
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Bemerkung
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {teilnehmer?.map((t: Teilnehmer) => {
-                  const data = attendanceData.get(t.id) || {
-                    anwesend: true,
-                    entschuldigt: false,
-                    bemerkung: '',
-                  };
-                  return (
-                    <tr key={t.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {t.vorname} {t.nachname}
-                        </div>
-                        <div className="text-sm text-gray-500">{t.email}</div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleAttendanceChange(t.id, 'anwesend', !data.anwesend)}
-                          className={`p-2 rounded-full ${
-                            data.anwesend
-                              ? 'bg-green-100 text-green-600'
-                              : 'bg-gray-100 text-gray-400'
-                          }`}
-                        >
-                          <Check className="w-5 h-5" />
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleAttendanceChange(t.id, 'entschuldigt', !data.entschuldigt)}
-                          className={`p-2 rounded-full ${
-                            data.entschuldigt
-                              ? 'bg-yellow-100 text-yellow-600'
-                              : 'bg-gray-100 text-gray-400'
-                          }`}
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </td>
-                      <td className="px-6 py-4">
-                        <input
-                          type="text"
-                          value={data.bemerkung}
-                          onChange={(e) => handleAttendanceChange(t.id, 'bemerkung', e.target.value)}
-                          placeholder="Optional..."
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Teilnehmer
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Anwesend
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Entschuldigt
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Bemerkung
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {teilnehmer.map((t: Teilnehmer) => {
+                    const data = attendanceData.get(t.id) || {
+                      anwesend: true,
+                      entschuldigt: false,
+                      bemerkung: '',
+                    };
+                    
+                    return (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                                <span className="text-sm font-medium text-gray-600">
+                                  {t.vorname[0]}{t.nachname[0]}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {t.vorname} {t.nachname}
+                              </div>
+                              <div className="text-sm text-gray-500">{t.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleAttendanceChange(t.id, 'anwesend', !data.anwesend)}
+                            className={`inline-flex items-center justify-center p-2 rounded-full transition-colors ${
+                              data.anwesend
+                                ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                            }`}
+                            title={data.anwesend ? 'Als abwesend markieren' : 'Als anwesend markieren'}
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleAttendanceChange(t.id, 'entschuldigt', !data.entschuldigt)}
+                            className={`inline-flex items-center justify-center p-2 rounded-full transition-colors ${
+                              data.entschuldigt
+                                ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
+                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                            }`}
+                            title={data.entschuldigt ? 'Entschuldigung entfernen' : 'Als entschuldigt markieren'}
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            type="text"
+                            value={data.bemerkung}
+                            onChange={(e) => handleAttendanceChange(t.id, 'bemerkung', e.target.value)}
+                            placeholder="Optional..."
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
+        </div>
+      )}
+
+      {/* Empty State when no course selected */}
+      {!selectedKurs && (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <Calendar className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Kurs auswählen
+          </h3>
+          <p className="text-gray-500">
+            Bitte wählen Sie einen Kurs aus, um die Anwesenheit zu erfassen
+          </p>
         </div>
       )}
     </div>
