@@ -23,71 +23,116 @@ const Kurse: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // FIXED: React Query v5 syntax
+  // Fetch kurse
   const { data: kurse, isLoading } = useQuery({
     queryKey: ['kurse'],
     queryFn: kursService.getAllKurse
   });
 
-  // FIXED: React Query v5 mutation syntax
+  // Create mutation
   const createMutation = useMutation({
     mutationFn: (data: CreateKursDto) => kursService.createKurs(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kurse'] }); // FIXED: object syntax
+      queryClient.invalidateQueries({ queryKey: ['kurse'] });
       toast.success('Kurs erfolgreich erstellt');
       setShowForm(false);
     },
-    onError: () => {
-      toast.error('Fehler beim Erstellen des Kurses');
+    onError: (error: any) => {
+      console.error('Create error:', error);
+      toast.error(error.response?.data?.message || 'Fehler beim Erstellen des Kurses');
     }
   });
 
-  // FIXED: React Query v5 mutation syntax
+  // Update mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<CreateKursDto> }) => 
       kursService.updateKurs(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kurse'] }); // FIXED: object syntax
+      queryClient.invalidateQueries({ queryKey: ['kurse'] });
       toast.success('Kurs erfolgreich aktualisiert');
       setEditingKurs(null);
       setShowForm(false);
     },
-    onError: () => {
-      toast.error('Fehler beim Aktualisieren des Kurses');
+    onError: (error: any) => {
+      console.error('Update error:', error);
+      toast.error(error.response?.data?.message || 'Fehler beim Aktualisieren des Kurses');
     }
   });
 
-  // FIXED: React Query v5 mutation syntax
+  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (id: number) => kursService.deleteKurs(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kurse'] }); // FIXED: object syntax
+      queryClient.invalidateQueries({ queryKey: ['kurse'] });
       toast.success('Kurs erfolgreich gelöscht');
     },
-    onError: () => {
-      toast.error('Fehler beim Löschen des Kurses');
+    onError: (error: any) => {
+      console.error('Delete error:', error);
+      toast.error(error.response?.data?.message || 'Fehler beim Löschen des Kurses');
     }
   });
 
-  const handleSubmit = (data: Partial<Kurs>) => {
-    // Convert Partial<Kurs> to CreateKursDto
-    const kursData: CreateKursDto = {
-      kursName: data.kursName!,
-      kurstypId: data.kurstypId!,
-      kursraumId: data.kursraumId!,
-      trainerId: data.trainerId!,
-      startdatum: data.startdatum!,
-      enddatum: data.enddatum!,
-      maxTeilnehmer: data.maxTeilnehmer!,
-      status: data.status!,
-      beschreibung: data.beschreibung
-    };
-
-    if (editingKurs) {
-      updateMutation.mutate({ id: editingKurs.id, data: kursData });
-    } else {
-      createMutation.mutate(kursData);
+  // Helper function to convert form data to CreateKursDto
+  const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
+    console.log('Converting form data to DTO:', formData);
+    
+    if (!formData.kursName || !formData.kurstypId || !formData.kursraumId || 
+        !formData.trainerId || !formData.startdatum || !formData.enddatum || 
+        !formData.maxTeilnehmer || !formData.status) {
+      console.error('Missing required fields:', {
+        kursName: !!formData.kursName,
+        kurstypId: !!formData.kurstypId,
+        kursraumId: !!formData.kursraumId,
+        trainerId: !!formData.trainerId,
+        startdatum: !!formData.startdatum,
+        enddatum: !!formData.enddatum,
+        maxTeilnehmer: !!formData.maxTeilnehmer,
+        status: !!formData.status
+      });
+      throw new Error('Required fields are missing');
     }
+
+    const dto = {
+      kursName: formData.kursName,
+      kurstypId: Number(formData.kurstypId),
+      kursraumId: Number(formData.kursraumId),
+      trainerId: Number(formData.trainerId),
+      startdatum: formData.startdatum,
+      enddatum: formData.enddatum,
+      maxTeilnehmer: Number(formData.maxTeilnehmer),
+      status: formData.status,
+      beschreibung: formData.beschreibung || undefined
+    };
+    
+    console.log('Converted DTO:', dto);
+    return dto;
+  };
+
+  const handleSubmit = (data: Partial<Kurs>) => {
+    console.log('Kurse page received form data:', data);
+    console.log('Is editing?', !!editingKurs);
+    console.log('Editing kurs ID:', editingKurs?.id);
+    
+    try {
+      const kursData = convertToCreateKursDto(data);
+
+      if (editingKurs) {
+        console.log('Updating kurs with ID:', editingKurs.id, 'Data:', kursData);
+        updateMutation.mutate({ id: editingKurs.id, data: kursData });
+      } else {
+        console.log('Creating new kurs with data:', kursData);
+        createMutation.mutate(kursData);
+      }
+    } catch (error: any) {
+      console.error('Error in handleSubmit:', error);
+      toast.error(error.message || 'Fehler beim Verarbeiten der Formulardaten');
+    }
+  };
+
+  const handleEdit = (kurs: Kurs) => {
+    console.log('Edit button clicked for kurs:', kurs);
+    setEditingKurs(kurs);
+    setShowForm(true);
   };
 
   const handleDelete = (id: number) => {
@@ -96,10 +141,16 @@ const Kurse: React.FC = () => {
     }
   };
 
-  // FIXED: Type the kurse array properly
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingKurs(null);
+  };
+
+  // Filter kurse
   const filteredKurse = kurse?.filter((kurs: Kurs) => {
     const matchesSearch = kurs.kursName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         kurs.trainerName.toLowerCase().includes(searchTerm.toLowerCase());
+                         kurs.trainerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         kurs.kurstypName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || kurs.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -109,7 +160,10 @@ const Kurse: React.FC = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Kurse</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Kurse</h1>
+          <p className="text-gray-600 mt-1">Verwalten Sie alle Deutschkurse</p>
+        </div>
         <button
           onClick={() => {
             setEditingKurs(null);
@@ -130,7 +184,7 @@ const Kurse: React.FC = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Kurs oder Trainer suchen..."
+                placeholder="Kurs, Trainer oder Typ suchen..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -239,10 +293,7 @@ const Kurse: React.FC = () => {
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => {
-                          setEditingKurs(kurs);
-                          setShowForm(true);
-                        }}
+                        onClick={() => handleEdit(kurs)}
                         className="text-gray-600 hover:text-gray-900"
                         title="Bearbeiten"
                       >
@@ -264,30 +315,34 @@ const Kurse: React.FC = () => {
           
           {filteredKurse?.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              Keine Kurse gefunden
+              {searchTerm || statusFilter !== 'all' 
+                ? 'Keine Kurse entsprechen den Filterkriterien' 
+                : 'Noch keine Kurse erstellt'
+              }
             </div>
           )}
         </div>
+
+        {/* Summary */}
+        {filteredKurse && filteredKurse.length > 0 && (
+          <div className="bg-gray-50 px-6 py-3 text-sm text-gray-700">
+            Zeige {filteredKurse.length} von {kurse?.length || 0} Kursen
+          </div>
+        )}
       </div>
 
       {/* Form Modal */}
       <Modal
         isOpen={showForm}
-        onClose={() => {
-          setShowForm(false);
-          setEditingKurs(null);
-        }}
+        onClose={handleCloseForm}
         title={editingKurs ? 'Kurs bearbeiten' : 'Neuer Kurs'}
         size="lg"
       >
         <KursForm
           initialData={editingKurs}
           onSubmit={handleSubmit}
-          onCancel={() => {
-            setShowForm(false);
-            setEditingKurs(null);
-          }}
-          isLoading={createMutation.isPending || updateMutation.isPending} // FIXED: isPending instead of isLoading
+          onCancel={handleCloseForm}
+          isLoading={createMutation.isPending || updateMutation.isPending}
         />
       </Modal>
     </div>

@@ -24,12 +24,28 @@ class KursService {
   }
 
   async createKurs(data: CreateKursDto): Promise<Kurs> {
-    const response = await api.post<Kurs>('/kurse', data);
+    // Ensure dates are in the correct format for the backend
+    const formattedData = {
+      ...data,
+      startdatum: this.formatDateForBackend(data.startdatum),
+      enddatum: this.formatDateForBackend(data.enddatum)
+    };
+    
+    const response = await api.post<Kurs>('/kurse', formattedData);
     return response.data;
   }
 
   async updateKurs(id: number, data: Partial<CreateKursDto>): Promise<Kurs> {
-    const response = await api.put<Kurs>(`/kurse/${id}`, data);
+    // Format dates if they exist
+    const formattedData = { ...data };
+    if (data.startdatum) {
+      formattedData.startdatum = this.formatDateForBackend(data.startdatum);
+    }
+    if (data.enddatum) {
+      formattedData.enddatum = this.formatDateForBackend(data.enddatum);
+    }
+    
+    const response = await api.put<Kurs>(`/kurse/${id}`, formattedData);
     return response.data;
   }
 
@@ -49,6 +65,31 @@ class KursService {
 
   async removeTeilnehmer(kursId: number, teilnehmerId: number): Promise<void> {
     await api.delete(`/kurse/${kursId}/teilnehmer/${teilnehmerId}`);
+  }
+
+  // Helper method to format dates for backend
+  private formatDateForBackend(dateString: string): string {
+    // If it's already in YYYY-MM-DD format, return as is
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return dateString;
+    }
+    
+    // If it's in ISO format (YYYY-MM-DDTHH:mm:ss), extract just the date part
+    if (dateString.includes('T')) {
+      return dateString.split('T')[0];
+    }
+    
+    // Try to parse and format the date
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        throw new Error('Invalid date');
+      }
+      return date.toISOString().split('T')[0];
+    } catch (error) {
+      console.warn('Date formatting error:', error);
+      return dateString; // Return original if formatting fails
+    }
   }
 }
 

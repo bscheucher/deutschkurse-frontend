@@ -1,3 +1,4 @@
+// src/pages/Anwesenheit.tsx - Fixed attendance logic
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -65,41 +66,32 @@ const AnwesenheitPage: React.FC = () => {
     enabled: !!selectedKurs,
   });
 
-  // Update attendance data when anwesenheit changes
+  // FIXED: Update attendance data when anwesenheit changes
   useEffect(() => {
-    if (anwesenheit && teilnehmer) {
+    if (teilnehmer) {
       const newAttendanceData = new Map<number, AttendanceData>();
       
       // Initialize with default values for all participants
+      // Default to absent (false) instead of present (true)
       teilnehmer.forEach((t: Teilnehmer) => {
         newAttendanceData.set(t.id, {
-          anwesend: true,
+          anwesend: false, // FIXED: Default to absent instead of present
           entschuldigt: false,
           bemerkung: '',
         });
       });
 
-      // Override with existing attendance records
-      anwesenheit.forEach((a: Anwesenheit) => {
-        newAttendanceData.set(a.teilnehmerId, {
-          anwesend: a.anwesend,
-          entschuldigt: a.entschuldigt,
-          bemerkung: a.bemerkung || '',
+      // Override with existing attendance records if they exist
+      if (anwesenheit && anwesenheit.length > 0) {
+        anwesenheit.forEach((a: Anwesenheit) => {
+          newAttendanceData.set(a.teilnehmerId, {
+            anwesend: a.anwesend,
+            entschuldigt: a.entschuldigt,
+            bemerkung: a.bemerkung || '',
+          });
         });
-      });
+      }
 
-      setAttendanceData(newAttendanceData);
-      setHasUnsavedChanges(false);
-    } else if (teilnehmer && !anwesenheit) {
-      // No attendance records exist yet, initialize with defaults
-      const newAttendanceData = new Map<number, AttendanceData>();
-      teilnehmer.forEach((t: Teilnehmer) => {
-        newAttendanceData.set(t.id, {
-          anwesend: true,
-          entschuldigt: false,
-          bemerkung: '',
-        });
-      });
       setAttendanceData(newAttendanceData);
       setHasUnsavedChanges(false);
     }
@@ -125,7 +117,7 @@ const AnwesenheitPage: React.FC = () => {
     value: boolean | string
   ) => {
     const current = attendanceData.get(teilnehmerId) || {
-      anwesend: true,
+      anwesend: false, // FIXED: Default to false instead of true
       entschuldigt: false,
       bemerkung: '',
     };
@@ -176,7 +168,7 @@ const AnwesenheitPage: React.FC = () => {
 
     const attendanceRecords = teilnehmer.map((t: Teilnehmer) => {
       const data = attendanceData.get(t.id) || {
-        anwesend: true,
+        anwesend: false, // FIXED: Default to false
         entschuldigt: false,
         bemerkung: '',
       };
@@ -431,7 +423,7 @@ const AnwesenheitPage: React.FC = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {teilnehmer.map((t: Teilnehmer) => {
                     const data = attendanceData.get(t.id) || {
-                      anwesend: true,
+                      anwesend: false, // FIXED: Default to false
                       entschuldigt: false,
                       bemerkung: '',
                     };

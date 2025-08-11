@@ -6,6 +6,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { de } from 'date-fns/locale';
 import { Kurs } from '../../types/kurs.types';
 import trainerService from '../../services/trainerService';
+import kurstypService from '../../services/kurstypService'
 import LoadingSpinner from '../common/LoadingSpinner';
 
 interface KursFormProps {
@@ -15,38 +16,98 @@ interface KursFormProps {
   isLoading?: boolean;
 }
 
+// Helper function to convert Kurs to form data
+const kursToFormData = (kurs: Kurs | null) => {
+  if (!kurs) {
+    return {
+      kursName: '',
+      kurstypId: '',
+      kursraumId: '',
+      trainerId: '',
+      startdatum: new Date().toISOString().split('T')[0],
+      enddatum: '',
+      maxTeilnehmer: 12,
+      status: 'geplant' as const,
+      beschreibung: '',
+    };
+  }
+
+  return {
+    kursName: kurs.kursName || '',
+    kurstypId: kurs.kurstypId || '',
+    kursraumId: kurs.kursraumId || '',
+    trainerId: kurs.trainerId || '',
+    startdatum: kurs.startdatum ? kurs.startdatum.split('T')[0] : new Date().toISOString().split('T')[0],
+    enddatum: kurs.enddatum ? kurs.enddatum.split('T')[0] : '',
+    maxTeilnehmer: kurs.maxTeilnehmer || 12,
+    status: kurs.status || 'geplant' as const,
+    beschreibung: kurs.beschreibung || '',
+  };
+};
+
 const KursForm: React.FC<KursFormProps> = ({ 
   initialData, 
   onSubmit, 
   onCancel,
   isLoading = false 
 }) => {
-  const [formData, setFormData] = useState<Partial<Kurs>>({
-    kursName: '',
-    kurstypId: 1,
-    kursraumId: 1,
-    trainerId: 1,
-    startdatum: new Date().toISOString().split('T')[0],
-    enddatum: '',
-    maxTeilnehmer: 12,
-    status: 'geplant',
-    beschreibung: '',
-    ...initialData
-  });
-
+  const [formData, setFormData] = useState(() => kursToFormData(initialData));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Update form data when initialData changes
+  useEffect(() => {
+    console.log('Form initialData changed:', initialData);
+    setFormData(kursToFormData(initialData));
+    setErrors({}); // Clear errors when form is reset
+  }, [initialData]);
+
   // Fetch available trainers
-  const { data: trainers } = useQuery({
+  const { data: trainers, isLoading: trainersLoading } = useQuery({
     queryKey: ['trainers'],
     queryFn: trainerService.getAllTrainer
   });
+
+  // Fetch course types - try API first, fall back to extraction from kurse
+  const { data: kurstypen, isLoading: kurstypenLoading } = useQuery({
+    queryKey: ['kurstypen'],
+    queryFn: kurstypService.getKurstypenFromKurse
+  });
+
+  // Fetch course rooms - try API first, fall back to extraction from kurse
+  const { data: kursraeume, isLoading: kursrauemeLoading } = useQuery({
+    queryKey: ['kursraeume'],
+    queryFn: kurstypService.getKursrauemeFromKurse
+  });
+
+  // Extract unique course types and rooms from existing data
+  const getUniqueKurstypen = () => {
+    return kurstypen || [];
+  };
+
+  const getUniqueKursraeume = () => {
+    return kursraeume || [];
+  };
+
+  const kurstypenOptions = getUniqueKurstypen();
+  const kursrauemeOptions = getUniqueKursraeume();
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.kursName?.trim()) {
       newErrors.kursName = 'Kursname ist erforderlich';
+    }
+
+    if (!formData.kurstypId) {
+      newErrors.kurstypId = 'Kurstyp ist erforderlich';
+    }
+
+    if (!formData.kursraumId) {
+      newErrors.kursraumId = 'Kursraum ist erforderlich';
+    }
+
+    if (!formData.trainerId) {
+      newErrors.trainerId = 'Trainer ist erforderlich';
     }
 
     if (!formData.startdatum) {
@@ -69,12 +130,25 @@ const KursForm: React.FC<KursFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submission data:', formData);
+    
     if (validate()) {
-      onSubmit(formData);
+      // Convert string IDs back to numbers for submission
+      const submitData = {
+        ...formData,
+        kurstypId: Number(formData.kurstypId),
+        kursraumId: Number(formData.kursraumId),
+        trainerId: Number(formData.trainerId),
+      };
+      console.log('Submitting data:', submitData);
+      onSubmit(submitData);
+    } else {
+      console.log('Validation errors:', errors);
     }
   };
 
-  const handleChange = (field: keyof Kurs, value: any) => {
+  const handleChange = (field: keyof typeof formData, value: any) => {
+    console.log(`Changing ${field} to:`, value);
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -82,24 +156,22 @@ const KursForm: React.FC<KursFormProps> = ({
     }
   };
 
-  // Mock data for course types and rooms
-  const kurstypen = [
-    { id: 1, name: 'Deutsch A1' },
-    { id: 2, name: 'Deutsch A2' },
-    { id: 3, name: 'Deutsch B1' },
-    { id: 4, name: 'Deutsch B2' },
-    { id: 5, name: 'Deutsch C1' },
-  ];
-
-  const kursraeume = [
-    { id: 1, name: 'Raum A101' },
-    { id: 2, name: 'Raum A102' },
-    { id: 3, name: 'Raum B201' },
-    { id: 4, name: 'Raum B202' },
-  ];
+  if (trainersLoading || kurstypenLoading || kursrauemeLoading) {
+    return <LoadingSpinner text="Lade Formulardaten..." />;
+  }
 
   return (
     <div className="space-y-6">
+      {/* Debug Info */}
+      <div className="bg-gray-50 p-3 rounded text-xs">
+        <strong>Debug:</strong> Editing: {initialData ? `ID ${initialData.id}` : 'New'} | 
+        Form kurstypId: {formData.kurstypId} | 
+        Form trainerId: {formData.trainerId} |
+        Available Kurstypen: {kurstypenOptions.length} |
+        Available Kursraeume: {kursrauemeOptions.length} |
+        Available Trainers: {trainers?.length || 0}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Kursname */}
         <div className="md:col-span-2">
@@ -127,13 +199,19 @@ const KursForm: React.FC<KursFormProps> = ({
           </label>
           <select
             value={formData.kurstypId}
-            onChange={(e) => handleChange('kurstypId', Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => handleChange('kurstypId', e.target.value)}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.kurstypId ? 'border-red-300' : 'border-gray-300'
+            }`}
           >
-            {kurstypen.map(typ => (
+            <option value="">Bitte wählen...</option>
+            {kurstypenOptions.map(typ => (
               <option key={typ.id} value={typ.id}>{typ.name}</option>
             ))}
           </select>
+          {errors.kurstypId && (
+            <p className="mt-1 text-sm text-red-600">{errors.kurstypId}</p>
+          )}
         </div>
 
         {/* Kursraum */}
@@ -143,13 +221,19 @@ const KursForm: React.FC<KursFormProps> = ({
           </label>
           <select
             value={formData.kursraumId}
-            onChange={(e) => handleChange('kursraumId', Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => handleChange('kursraumId', e.target.value)}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.kursraumId ? 'border-red-300' : 'border-gray-300'
+            }`}
           >
-            {kursraeume.map(raum => (
+            <option value="">Bitte wählen...</option>
+            {kursrauemeOptions.map(raum => (
               <option key={raum.id} value={raum.id}>{raum.name}</option>
             ))}
           </select>
+          {errors.kursraumId && (
+            <p className="mt-1 text-sm text-red-600">{errors.kursraumId}</p>
+          )}
         </div>
 
         {/* Trainer */}
@@ -159,15 +243,21 @@ const KursForm: React.FC<KursFormProps> = ({
           </label>
           <select
             value={formData.trainerId}
-            onChange={(e) => handleChange('trainerId', Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => handleChange('trainerId', e.target.value)}
+            className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+              errors.trainerId ? 'border-red-300' : 'border-gray-300'
+            }`}
           >
+            <option value="">Bitte wählen...</option>
             {trainers?.map((trainer: any) => (
               <option key={trainer.id} value={trainer.id}>
                 {trainer.vorname} {trainer.nachname}
               </option>
             ))}
           </select>
+          {errors.trainerId && (
+            <p className="mt-1 text-sm text-red-600">{errors.trainerId}</p>
+          )}
         </div>
 
         {/* Status */}
@@ -201,7 +291,7 @@ const KursForm: React.FC<KursFormProps> = ({
               errors.startdatum ? 'border-red-300' : 'border-gray-300'
             }`}
             placeholderText="Datum wählen"
-            minDate={new Date()}
+            minDate={initialData ? undefined : new Date()} // Don't restrict past dates when editing
           />
           {errors.startdatum && (
             <p className="mt-1 text-sm text-red-600">{errors.startdatum}</p>

@@ -1,0 +1,1 @@
+export { default as StundenplanForm } from './StundenplanForm';
