@@ -14,6 +14,7 @@ import Kurse from './pages/Kurse';
 import KursDetails from './pages/KursDetails';
 import KursEdit from './pages/KursEdit';
 import Teilnehmer from './pages/Teilnehmer';
+import TeilnehmerNew from './pages/TeilnehmerNew';
 import TeilnehmerDetails from './pages/TeilnehmerDetails';
 import Trainer from './pages/Trainer';
 import Anwesenheit from './pages/Anwesenheit';
@@ -71,6 +72,11 @@ function App() {
                 <Route path="/teilnehmer" element={
                   <ProtectedRoute roles={['ADMIN', 'TRAINER', 'STAFF']}>
                     <Teilnehmer />
+                  </ProtectedRoute>
+                } />
+                <Route path="/teilnehmer/new" element={
+                  <ProtectedRoute roles={['ADMIN', 'STAFF']}>
+                    <TeilnehmerNew />
                   </ProtectedRoute>
                 } />
                 <Route path="/teilnehmer/:id" element={
