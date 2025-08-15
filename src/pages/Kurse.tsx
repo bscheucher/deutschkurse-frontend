@@ -73,40 +73,94 @@ const Kurse: React.FC = () => {
   });
 
   // Helper function to convert form data to CreateKursDto
-  const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
-    console.log('Converting form data to DTO:', formData);
-    
-    if (!formData.kursName || !formData.kurstypId || !formData.kursraumId || 
-        !formData.trainerId || !formData.startdatum || !formData.enddatum || 
-        !formData.maxTeilnehmer || !formData.status) {
-      console.error('Missing required fields:', {
-        kursName: !!formData.kursName,
-        kurstypId: !!formData.kurstypId,
-        kursraumId: !!formData.kursraumId,
-        trainerId: !!formData.trainerId,
-        startdatum: !!formData.startdatum,
-        enddatum: !!formData.enddatum,
-        maxTeilnehmer: !!formData.maxTeilnehmer,
-        status: !!formData.status
-      });
-      throw new Error('Required fields are missing');
-    }
+const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
+  console.log('Converting form data to DTO:', formData);
+  
+  // Validate required fields exist
+  if (!formData.kursName || !formData.kurstypId || !formData.kursraumId || 
+      !formData.trainerId || !formData.startdatum || !formData.enddatum || 
+      !formData.maxTeilnehmer || !formData.status) {
+    console.error('Missing required fields:', {
+      kursName: !!formData.kursName,
+      kurstypId: !!formData.kurstypId,
+      kursraumId: !!formData.kursraumId,
+      trainerId: !!formData.trainerId,
+      startdatum: !!formData.startdatum,
+      enddatum: !!formData.enddatum,
+      maxTeilnehmer: !!formData.maxTeilnehmer,
+      status: !!formData.status
+    });
+    throw new Error('Required fields are missing');
+  }
 
-    const dto = {
-      kursName: formData.kursName,
-      kurstypId: Number(formData.kurstypId),
-      kursraumId: Number(formData.kursraumId),
-      trainerId: Number(formData.trainerId),
-      startdatum: formData.startdatum,
-      enddatum: formData.enddatum,
-      maxTeilnehmer: Number(formData.maxTeilnehmer),
-      status: formData.status,
-      beschreibung: formData.beschreibung || undefined
-    };
-    
-    console.log('Converted DTO:', dto);
-    return dto;
+  // Convert IDs to numbers with validation
+  const kurstypId = Number(formData.kurstypId);
+  const kursraumId = Number(formData.kursraumId);
+  const trainerId = Number(formData.trainerId);
+  const maxTeilnehmer = Number(formData.maxTeilnehmer);
+
+  // Validate that numeric conversions were successful
+  if (isNaN(kurstypId) || kurstypId <= 0) {
+    console.error('Invalid kurstypId:', formData.kurstypId);
+    throw new Error('Ungültiger Kurstyp');
+  }
+  
+  if (isNaN(kursraumId) || kursraumId <= 0) {
+    console.error('Invalid kursraumId:', formData.kursraumId);
+    throw new Error('Ungültiger Kursraum');
+  }
+  
+  if (isNaN(trainerId) || trainerId <= 0) {
+    console.error('Invalid trainerId:', formData.trainerId);
+    throw new Error('Ungültiger Trainer');
+  }
+  
+  if (isNaN(maxTeilnehmer) || maxTeilnehmer < 1) {
+    console.error('Invalid maxTeilnehmer:', formData.maxTeilnehmer);
+    throw new Error('Ungültige maximale Teilnehmerzahl');
+  }
+
+  // Validate status is one of the allowed values
+  const validStatuses = ['geplant', 'laufend', 'abgeschlossen', 'abgebrochen'];
+  if (!validStatuses.includes(formData.status)) {
+    console.error('Invalid status:', formData.status);
+    throw new Error('Ungültiger Status');
+  }
+
+  // Validate dates
+  const startDate = new Date(formData.startdatum);
+  const endDate = new Date(formData.enddatum);
+  
+  if (isNaN(startDate.getTime())) {
+    console.error('Invalid startdatum:', formData.startdatum);
+    throw new Error('Ungültiges Startdatum');
+  }
+  
+  if (isNaN(endDate.getTime())) {
+    console.error('Invalid enddatum:', formData.enddatum);
+    throw new Error('Ungültiges Enddatum');
+  }
+  
+  if (endDate < startDate) {
+    console.error('End date before start date');
+    throw new Error('Enddatum muss nach dem Startdatum liegen');
+  }
+
+  const dto: CreateKursDto = {
+    kursName: formData.kursName.trim(),
+    kurstypId,
+    kursraumId,
+    trainerId,
+    startdatum: formData.startdatum,
+    enddatum: formData.enddatum,
+    maxTeilnehmer,
+    status: formData.status,
+    beschreibung: formData.beschreibung?.trim() || undefined
   };
+  
+  console.log('Successfully converted DTO:', dto);
+  return dto;
+};
 
   const handleSubmit = (data: Partial<Kurs>) => {
     console.log('Kurse page received form data:', data);
