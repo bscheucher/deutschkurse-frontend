@@ -1,5 +1,15 @@
+// src/services/authService.ts
 import api from './api';
 import { LoginRequest, RegisterRequest, AuthResponse, User } from '../types/auth.types';
+
+// Add interface for user profile update
+export interface UpdateProfileRequest {
+  username?: string;
+  email?: string;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+}
 
 class AuthService {
   async login(data: LoginRequest): Promise<AuthResponse> {
@@ -20,6 +30,12 @@ class AuthService {
 
   async getCurrentUser(): Promise<User> {
     const response = await api.get<User>('/auth/me');
+    return response.data;
+  }
+
+  // NEW: Update current user profile
+  async updateCurrentUserProfile(data: UpdateProfileRequest): Promise<User> {
+    const response = await api.put<User>('/auth/me', data);
     return response.data;
   }
 

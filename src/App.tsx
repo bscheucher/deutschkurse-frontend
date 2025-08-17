@@ -1,3 +1,4 @@
+// src/App.tsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -20,6 +21,7 @@ import Trainer from './pages/Trainer';
 import Anwesenheit from './pages/Anwesenheit';
 import Stundenplan from './pages/Stundenplan';
 import Users from './pages/Users';
+import UserProfile from './pages/UserProfile'; // NEW: Import UserProfile
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +54,13 @@ function App() {
               
               <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                
+                {/* NEW: User Profile Route - accessible to all authenticated users */}
+                <Route path="/profile" element={
+                  <ProtectedRoute>
+                    <UserProfile />
+                  </ProtectedRoute>
+                } />
                 
                 <Route path="/kurse" element={
                   <ProtectedRoute roles={['ADMIN', 'TRAINER', 'STAFF']}>
