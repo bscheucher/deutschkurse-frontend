@@ -24,7 +24,7 @@ const Kurse: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Fetch kurse
-  const { data: kurse, isLoading } = useQuery({
+  const { data: kurse, isPending } = useQuery({
     queryKey: ['kurse'],
     queryFn: kursService.getAllKurse
   });
@@ -209,7 +209,7 @@ const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
     return matchesSearch && matchesStatus;
   });
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isPending) return <LoadingSpinner />;
 
   return (
     <div>
@@ -396,7 +396,7 @@ const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
           initialData={editingKurs}
           onSubmit={handleSubmit}
           onCancel={handleCloseForm}
-          isLoading={createMutation.isPending || updateMutation.isPending}
+          isPending={createMutation.isPending || updateMutation.isPending}
         />
       </Modal>
     </div>

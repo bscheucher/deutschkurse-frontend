@@ -10,14 +10,14 @@ interface TrainerFormProps {
   initialData: Trainer | null;
   onSubmit: (data: Partial<Trainer>) => void;
   onCancel: () => void;
-  isLoading?: boolean;
+  isPending?: boolean;
 }
 
 const TrainerForm: React.FC<TrainerFormProps> = ({ 
   initialData, 
   onSubmit, 
   onCancel,
-  isLoading = false 
+  isPending = false 
 }) => {
   const [formData, setFormData] = useState<Partial<Trainer>>({
     vorname: '',
@@ -258,10 +258,10 @@ const TrainerForm: React.FC<TrainerFormProps> = ({
         </button>
         <button
           onClick={handleSubmit}
-          disabled={isLoading}
+          disabled={isPending}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <>
               <LoadingSpinner size="sm" />
               <span className="ml-2">Wird gespeichert...</span>

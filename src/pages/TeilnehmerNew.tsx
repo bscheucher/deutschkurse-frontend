@@ -106,7 +106,7 @@ const TeilnehmerNew: React.FC = () => {
             initialData={null}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
-            isLoading={createMutation.isPending}
+            isPending={createMutation.isPending}
           />
         </div>
       </div>

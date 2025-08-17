@@ -9,7 +9,7 @@ interface UserProfileFormProps {
   initialData: UserType;
   onSubmit: (data: UpdateProfileRequest) => void;
   onCancel: () => void;
-  isLoading?: boolean;
+  isPending?: boolean;
 }
 
 interface FormData {
@@ -26,7 +26,7 @@ const UserProfileForm: React.FC<UserProfileFormProps> = ({
   initialData,
   onSubmit,
   onCancel,
-  isLoading = false
+  isPending = false
 }) => {
   const [formData, setFormData] = useState<FormData>({
     username: initialData.username || '',
@@ -406,10 +406,10 @@ const UserProfileForm: React.FC<UserProfileFormProps> = ({
         </button>
         <button
           onClick={handleSubmit}
-          disabled={isLoading}
+          disabled={isPending}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <>
               <LoadingSpinner size="sm" />
               <span className="ml-2">Wird gespeichert...</span>

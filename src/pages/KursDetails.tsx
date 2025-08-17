@@ -30,14 +30,14 @@ const KursDetails: React.FC = () => {
   const [editingStundenplan, setEditingStundenplan] = useState<Stundenplan | null>(null);
 
   // Fetch course data
-  const { data: kurs, isLoading: kursLoading, error: kursError } = useQuery({
+  const { data: kurs, isPending: kursLoading, error: kursError } = useQuery({
     queryKey: ['kurs', id],
     queryFn: () => kursService.getKursById(Number(id)),
     enabled: !!id
   });
 
   // Fetch participants in course
-  const { data: teilnehmerInKurs, isLoading: teilnehmerLoading } = useQuery({
+  const { data: teilnehmerInKurs, isPending: teilnehmerLoading } = useQuery({
     queryKey: ['kursTeilnehmer', id],
     queryFn: () => kursService.getTeilnehmerInKurs(Number(id)),
     enabled: !!id
@@ -50,7 +50,7 @@ const KursDetails: React.FC = () => {
   });
 
   // Fetch schedule entries for this course
-  const { data: stundenplanEntries, isLoading: stundenplanLoading } = useQuery({
+  const { data: stundenplanEntries, isPending: stundenplanLoading } = useQuery({
     queryKey: ['stundenplan', 'kurs', id],
     queryFn: () => stundenplanService.getStundenplanByKurs(Number(id)),
     enabled: !!id
@@ -570,7 +570,7 @@ const KursDetails: React.FC = () => {
           kursName={kursData.kursName}
           onSubmit={handleStundenplanSubmit}
           onCancel={handleCloseStundenplanModal}
-          isLoading={createStundenplanMutation.isPending || updateStundenplanMutation.isPending}
+          isPending={createStundenplanMutation.isPending || updateStundenplanMutation.isPending}
         />
       </Modal>
     </div>

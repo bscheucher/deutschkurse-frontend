@@ -23,14 +23,14 @@ const TeilnehmerDetails: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
 
   // Fetch participant data
-  const { data: teilnehmer, isLoading: teilnehmerLoading, error: teilnehmerError } = useQuery({
+  const { data: teilnehmer, isPending: teilnehmerLoading, error: teilnehmerError } = useQuery({
     queryKey: ['teilnehmer', id],
     queryFn: () => teilnehmerService.getTeilnehmerById(Number(id)),
     enabled: !!id
   });
 
   // Fetch courses for this participant
-  const { data: kurse, isLoading: kurseLoading } = useQuery({
+  const { data: kurse, isPending: kurseLoading } = useQuery({
     queryKey: ['teilnehmerKurse', id],
     queryFn: () => teilnehmerService.getKurseForTeilnehmer(Number(id)),
     enabled: !!id
@@ -426,7 +426,7 @@ const TeilnehmerDetails: React.FC = () => {
           initialData={teilnehmerData}
           onSubmit={handleUpdate}
           onCancel={handleCloseEditModal}
-          isLoading={updateMutation.isPending}
+          isPending={updateMutation.isPending}
         />
       </Modal>
     </div>

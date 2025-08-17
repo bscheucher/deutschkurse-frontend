@@ -16,7 +16,7 @@ interface LoginError {
 
 interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
+  isPending: boolean;
   loginError: LoginError | null;
   login: (data: LoginRequest) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
@@ -31,7 +31,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isPending, setisPending] = useState(true);
   const [loginError, setLoginError] = useState<LoginError | null>(null);
   const navigate = useNavigate();
 
@@ -49,7 +49,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.removeItem('token');
       }
     }
-    setIsLoading(false);
+    setisPending(false);
   };
 
   const clearLoginError = () => {
@@ -78,7 +78,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (data: LoginRequest) => {
     try {
       setLoginError(null);
-      setIsLoading(true);
+      setisPending(true);
       
       const response = await authService.login(data);
       const userData = await authService.getCurrentUser();
@@ -96,7 +96,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoginError(loginErrorData);
       throw error;
     } finally {
-      setIsLoading(false);
+      setisPending(false);
     }
   };
 
@@ -108,7 +108,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const register = async (data: RegisterRequest) => {
     try {
       setLoginError(null);
-      setIsLoading(true);
+      setisPending(true);
       
       const response = await authService.register(data);
       const userData = await authService.getCurrentUser();
@@ -121,7 +121,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoginError(registrationError);
       throw error;
     } finally {
-      setIsLoading(false);
+      setisPending(false);
     }
   };
 
@@ -216,7 +216,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <AuthContext.Provider value={{ 
       user, 
-      isLoading, 
+      isPending, 
       loginError,
       login, 
       register, 

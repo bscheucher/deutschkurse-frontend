@@ -10,7 +10,7 @@ interface TeilnehmerFormProps {
   initialData: Teilnehmer | null;
   onSubmit: (data: Partial<Teilnehmer>) => void;
   onCancel: () => void;
-  isLoading?: boolean;
+  isPending?: boolean;
 }
 
 // Form data interface to match Teilnehmer types
@@ -59,7 +59,7 @@ const TeilnehmerForm: React.FC<TeilnehmerFormProps> = ({
   initialData,
   onSubmit,
   onCancel,
-  isLoading = false
+  isPending = false
 }) => {
   const [formData, setFormData] = useState<TeilnehmerFormData>(() => teilnehmerToFormData(initialData));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -337,10 +337,10 @@ const TeilnehmerForm: React.FC<TeilnehmerFormProps> = ({
         </button>
         <button
           onClick={handleSubmit}
-          disabled={isLoading}
+          disabled={isPending}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <>
               <LoadingSpinner size="sm" />
               <span className="ml-2">Wird gespeichert...</span>

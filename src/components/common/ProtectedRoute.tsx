@@ -9,9 +9,9 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, roles }) => {
-  const { user, isLoading } = useAuth();
+  const { user, isPending } = useAuth();
 
-  if (isLoading) {
+  if (isPending) {
     return <LoadingSpinner />;
   }
 

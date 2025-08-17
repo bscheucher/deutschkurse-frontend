@@ -48,7 +48,7 @@ const AnwesenheitPage: React.FC = () => {
   const [dateValidationError, setDateValidationError] = useState<string | null>(null);
 
   // Fetch active courses
-  const { data: kurse, isLoading: kurseLoading, error: kurseError } = useQuery({
+  const { data: kurse, isPending: kurseLoading, error: kurseError } = useQuery({
     queryKey: ['kurse', 'active'],
     queryFn: async () => {
       const allKurse = await kursService.getAllKurse();
@@ -59,7 +59,7 @@ const AnwesenheitPage: React.FC = () => {
   // Fetch stundenplan for selected course
   const { 
     data: stundenplan, 
-    isLoading: stundenplanLoading,
+    isPending: stundenplanLoading,
     error: stundenplanError 
   } = useQuery({
     queryKey: ['stundenplan', 'kurs', selectedKurs],
@@ -70,7 +70,7 @@ const AnwesenheitPage: React.FC = () => {
   // Fetch attendance for selected course and date
   const { 
     data: anwesenheit, 
-    isLoading: anwesenheitLoading,
+    isPending: anwesenheitLoading,
     error: anwesenheitError,
     refetch: refetchAttendance 
   } = useQuery({
@@ -86,7 +86,7 @@ const AnwesenheitPage: React.FC = () => {
   // Fetch participants for selected course
   const { 
     data: teilnehmer,
-    isLoading: teilnehmerLoading,
+    isPending: teilnehmerLoading,
     error: teilnehmerError
   } = useQuery({
     queryKey: ['kursTeilnehmer', selectedKurs],

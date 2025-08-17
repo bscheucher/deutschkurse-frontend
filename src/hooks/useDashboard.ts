@@ -1,4 +1,4 @@
-// src/hooks/useDashboard.ts - Verbesserte Dashboard Hook
+// src/hooks/useDashboard.ts - Fixed for React Query v5 compatibility
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dashboardService from '../services/dashboardService';
@@ -60,9 +60,9 @@ interface UseDashboardReturn {
   recentActivity: ActivityItem[] | undefined;
   
   // Loading states
-  isLoadingStats: boolean;
-  isLoadingCharts: boolean;
-  isLoadingActivity: boolean;
+  isPendingStats: boolean;
+  isPendingCharts: boolean;
+  isPendingActivity: boolean;
   isRefreshing: boolean;
   
   // Error states
@@ -86,7 +86,7 @@ interface UseDashboardReturn {
   // Computed values
   hasData: boolean;
   hasErrors: boolean;
-  isLoading: boolean;
+  isPending: boolean;
 }
 
 export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardReturn => {
@@ -101,10 +101,10 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>(initialTimeRange);
 
-  // Dashboard stats query mit verbesserter Fehlerbehandlung
+  // Dashboard stats query - FIXED: Removed onError and onSuccess
   const {
     data: stats,
-    isLoading: isLoadingStats,
+    isPending: isPendingStats,
     error: statsError,
     refetch: refetchStats
   } = useQuery({
@@ -122,18 +122,12 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     },
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
     staleTime: 5 * 60 * 1000, // 5 minutes
-    onError: (error) => {
-      console.error('Dashboard stats query error:', error);
-    },
-    onSuccess: (data) => {
-      console.log('Dashboard stats query successful:', data);
-    }
   });
 
-  // Chart data query mit verbesserter Fehlerbehandlung
+  // Chart data query - FIXED: Removed onError
   const {
     data: chartData,
-    isLoading: isLoadingCharts,
+    isPending: isPendingCharts,
     error: chartsError,
     refetch: refetchCharts
   } = useQuery({
@@ -151,15 +145,12 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     },
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
     staleTime: 10 * 60 * 1000, // 10 minutes
-    onError: (error) => {
-      console.error('Chart data query error:', error);
-    }
   });
 
-  // Recent activity query mit verbesserter Fehlerbehandlung
+  // Recent activity query - FIXED: Removed onError
   const {
     data: recentActivity,
-    isLoading: isLoadingActivity,
+    isPending: isPendingActivity,
     error: activityError,
     refetch: refetchActivity
   } = useQuery({
@@ -177,10 +168,36 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     },
     retryDelay: 2000,
     staleTime: 2 * 60 * 1000, // 2 minutes
-    onError: (error) => {
-      console.warn('Activity data query error (non-critical):', error);
-    }
   });
+
+  // FIXED: Handle success/error states with useEffect instead of callbacks
+  useEffect(() => {
+    if (statsError && !isPendingStats && !stats) {
+      console.error('Critical error loading dashboard stats:', statsError);
+      toast.error('Fehler beim Laden der Dashboard-Statistiken');
+    }
+  }, [statsError, isPendingStats, stats]);
+
+  useEffect(() => {
+    if (chartsError && !isPendingCharts && !chartData) {
+      console.error('Error loading chart data:', chartsError);
+      toast.error('Fehler beim Laden der Diagramm-Daten');
+    }
+  }, [chartsError, isPendingCharts, chartData]);
+
+  useEffect(() => {
+    if (activityError && !isPendingActivity) {
+      console.warn('Non-critical error loading activity data:', activityError);
+      // Don't show toast for activity errors as they're less critical
+    }
+  }, [activityError, isPendingActivity]);
+
+  // Log successful data fetches
+  useEffect(() => {
+    if (stats && !isPendingStats) {
+      console.log('Dashboard stats query successful:', stats);
+    }
+  }, [stats, isPendingStats]);
 
   // Refresh all data
   const refresh = useCallback(async () => {
@@ -275,7 +292,7 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   // Computed values
   const hasData = Boolean(stats && chartData && recentActivity);
   const hasErrors = Boolean(statsError || chartsError || activityError);
-  const isLoading = isLoadingStats || isLoadingCharts || isLoadingActivity;
+  const isPending = isPendingStats || isPendingCharts || isPendingActivity;
 
   // Effect to handle visibility change
   useEffect(() => {
@@ -293,28 +310,6 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     };
   }, [autoRefresh]);
 
-  // Effect to show error notifications (weniger aggressiv)
-  useEffect(() => {
-    if (statsError && !isLoadingStats && !stats) {
-      console.error('Critical error loading dashboard stats:', statsError);
-      toast.error('Fehler beim Laden der Dashboard-Statistiken');
-    }
-  }, [statsError, isLoadingStats, stats]);
-
-  useEffect(() => {
-    if (chartsError && !isLoadingCharts && !chartData) {
-      console.error('Error loading chart data:', chartsError);
-      toast.error('Fehler beim Laden der Diagramm-Daten');
-    }
-  }, [chartsError, isLoadingCharts, chartData]);
-
-  useEffect(() => {
-    if (activityError && !isLoadingActivity) {
-      console.warn('Non-critical error loading activity data:', activityError);
-      // Don't show toast for activity errors as they're less critical
-    }
-  }, [activityError, isLoadingActivity]);
-
   return {
     // Data
     stats: stats as DashboardStats | undefined,
@@ -322,9 +317,9 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     recentActivity: recentActivity as ActivityItem[] | undefined,
     
     // Loading states
-    isLoadingStats,
-    isLoadingCharts,
-    isLoadingActivity,
+    isPendingStats,
+    isPendingCharts,
+    isPendingActivity,
     isRefreshing,
     
     // Error states
@@ -348,7 +343,7 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     // Computed values
     hasData,
     hasErrors,
-    isLoading
+    isPending
   };
 };
 
@@ -466,3 +461,7 @@ export const useDashboardSettings = () => {
 };
 
 export default useDashboard;
+
+// Additional fix for Users.tsx mutation isPending issue
+// In React Query v5, mutations use isPending instead of isPending
+// This should be applied to any useMutation hooks in your codebase

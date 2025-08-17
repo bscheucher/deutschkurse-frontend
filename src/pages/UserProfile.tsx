@@ -130,7 +130,7 @@ const UserProfile: React.FC = () => {
                   initialData={user}
                   onSubmit={handleProfileUpdate}
                   onCancel={handleCancel}
-                  isLoading={updateProfileMutation.isPending}
+                  isPending={updateProfileMutation.isPending}
                 />
               ) : (
                 <div className="space-y-6">

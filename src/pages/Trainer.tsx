@@ -20,7 +20,7 @@ const TrainerPage: React.FC = () => {
   const [abteilungFilter, setAbteilungFilter] = useState<string>('all');
 
   // Fetch trainers
-  const { data: trainer, isLoading } = useQuery({
+  const { data: trainer, isPending } = useQuery({
     queryKey: ['trainer'],
     queryFn: trainerService.getAllTrainer
   });
@@ -113,7 +113,7 @@ const TrainerPage: React.FC = () => {
     name: t.abteilungName || `Abteilung ${t.abteilungId}` 
   })))];
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isPending) return <LoadingSpinner />;
 
   return (
     <div>
@@ -194,7 +194,7 @@ const TrainerPage: React.FC = () => {
             setShowForm(false);
             setEditingTrainer(null);
           }}
-          isLoading={createMutation.isPending || updateMutation.isPending}
+          isPending={createMutation.isPending || updateMutation.isPending}
         />
       </Modal>
     </div>

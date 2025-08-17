@@ -43,7 +43,7 @@ const Dashboard: React.FC = () => {
     stats,
     chartData,
     recentActivity,
-    isLoading,
+    isPending,
     hasErrors,
     refresh,
     exportData,
@@ -62,7 +62,7 @@ const Dashboard: React.FC = () => {
   const kpiSummary = getKpiSummary();
 
   console.log('Dashboard render:', { 
-    isLoading, 
+    isPending, 
     hasErrors, 
     hasStats: !!stats, 
     hasChartData: !!chartData,
@@ -70,7 +70,7 @@ const Dashboard: React.FC = () => {
   });
 
   // Show loading state only if we have no data at all
-  if (isLoading && !stats) {
+  if (isPending && !stats) {
     return (
       <div className="flex items-center justify-center min-h-64">
         <LoadingSpinner text="Lade Dashboard..." />

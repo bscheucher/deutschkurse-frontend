@@ -23,20 +23,20 @@ const Stundenplan: React.FC = () => {
   const [filterRoom, setFilterRoom] = useState<string>('all');
 
   // Fetch courses to get additional details
-  const { data: kurse, isLoading: kurseLoading } = useQuery({
+  const { data: kurse, isPending: kurseLoading } = useQuery({
     queryKey: ['kurse', 'active'],
     queryFn: () => kursService.getAllKurse(),
     select: (data: Kurs[]) => data.filter(k => k.status === 'laufend' || k.status === 'geplant')
   });
 
   // Fetch ALL schedule entries
-  const { data: stundenplanEntries, isLoading: stundenplanLoading } = useQuery({
+  const { data: stundenplanEntries, isPending: stundenplanLoading } = useQuery({
     queryKey: ['stundenplan'],
     queryFn: stundenplanService.getAllStundenplan,
     select: (data: StundenplanEntry[]) => data.filter(s => s.aktiv)
   });
 
-  const isLoading = kurseLoading || stundenplanLoading;
+  const isPending = kurseLoading || stundenplanLoading;
 
   // Helper function to check if a course is active during the current week
   const isCourseActiveInWeek = (kurs: Kurs, weekStart: Date, weekEnd: Date): boolean => {
@@ -134,7 +134,7 @@ const Stundenplan: React.FC = () => {
 
   const weekStats = getWeekStatistics();
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isPending) return <LoadingSpinner />;
 
   return (
     <div>

@@ -13,7 +13,7 @@ interface KursFormProps {
   initialData: Kurs | null;
   onSubmit: (data: Partial<Kurs>) => void;
   onCancel: () => void;
-  isLoading?: boolean;
+  isPending?: boolean;
 }
 
 // Helper function to convert Kurs to form data
@@ -49,7 +49,7 @@ const KursForm: React.FC<KursFormProps> = ({
   initialData, 
   onSubmit, 
   onCancel,
-  isLoading = false 
+  isPending = false 
 }) => {
   const [formData, setFormData] = useState(() => kursToFormData(initialData));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -62,19 +62,19 @@ const KursForm: React.FC<KursFormProps> = ({
   }, [initialData]);
 
   // Fetch available trainers
-  const { data: trainers, isLoading: trainersLoading } = useQuery({
+  const { data: trainers, isPending: trainersLoading } = useQuery({
     queryKey: ['trainers'],
     queryFn: trainerService.getAllTrainer
   });
 
   // Fetch course types - try API first, fall back to extraction from kurse
-  const { data: kurstypen, isLoading: kurstypenLoading } = useQuery({
+  const { data: kurstypen, isPending: kurstypenLoading } = useQuery({
     queryKey: ['kurstypen'],
     queryFn: kurstypService.getKurstypenFromKurse
   });
 
   // Fetch course rooms - try API first, fall back to extraction from kurse
-  const { data: kursraeume, isLoading: kursrauemeLoading } = useQuery({
+  const { data: kursraeume, isPending: kursrauemeLoading } = useQuery({
     queryKey: ['kursraeume'],
     queryFn: kurstypService.getKursrauemeFromKurse
   });
@@ -365,10 +365,10 @@ const KursForm: React.FC<KursFormProps> = ({
         </button>
         <button
           onClick={handleSubmit}
-          disabled={isLoading}
+          disabled={isPending}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <>
               <LoadingSpinner size="sm" />
               <span className="ml-2">Wird gespeichert...</span>

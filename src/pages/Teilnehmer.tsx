@@ -19,7 +19,7 @@ const TeilnehmerPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const { data: teilnehmer, isLoading } = useQuery({
+  const { data: teilnehmer, isPending } = useQuery({
     queryKey: ['teilnehmer'],
     queryFn: teilnehmerService.getAllTeilnehmer
   });
@@ -52,7 +52,7 @@ const TeilnehmerPage: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isPending) return <LoadingSpinner />;
 
   return (
     <div>

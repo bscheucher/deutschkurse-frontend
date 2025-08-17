@@ -15,7 +15,7 @@ const KursEdit: React.FC = () => {
   const queryClient = useQueryClient();
 
   // Fetch the course data
-  const { data: kurs, isLoading: kursLoading, error } = useQuery({
+  const { data: kurs, isPending: kursLoading, error } = useQuery({
     queryKey: ['kurs', id],
     queryFn: () => kursService.getKursById(Number(id)),
     enabled: !!id
@@ -229,7 +229,7 @@ const KursEdit: React.FC = () => {
             initialData={kursData}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
-            isLoading={updateMutation.isPending}
+            isPending={updateMutation.isPending}
           />
         </div>
       </div>

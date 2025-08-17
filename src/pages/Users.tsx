@@ -21,7 +21,7 @@ const Users: React.FC = () => {
   const [newRole, setNewRole] = useState<string>('');
 
   // FIXED: React Query v5 syntax
-  const { data: users, isLoading } = useQuery({
+  const { data: users, isPending } = useQuery({
     queryKey: ['users'],
     queryFn: authService.getAllUsers
   });
@@ -106,7 +106,7 @@ const Users: React.FC = () => {
     }
   };
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isPending) return <LoadingSpinner />;
 
   return (
     <div>
@@ -296,7 +296,7 @@ const Users: React.FC = () => {
               </button>
               <button
                 onClick={handleRoleUpdate}
-                disabled={updateRoleMutation.isPending} // FIXED: isPending instead of isLoading
+                disabled={updateRoleMutation.isPending} // FIXED: isPending instead of isPending
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
                 {updateRoleMutation.isPending ? 'Wird aktualisiert...' : 'Aktualisieren'} {/* FIXED: isPending */}

@@ -10,7 +10,7 @@ interface StundenplanFormProps {
   kursName: string;
   onSubmit: (data: CreateStundenplanDto) => void;
   onCancel: () => void;
-  isLoading?: boolean;
+  isPending?: boolean;
 }
 
 // Helper function to convert time from HH:MM:SS to HH:MM
@@ -61,7 +61,7 @@ const StundenplanForm: React.FC<StundenplanFormProps> = ({
   kursName,
   onSubmit,
   onCancel,
-  isLoading = false
+  isPending = false
 }) => {
   const [formData, setFormData] = useState(() => stundenplanToFormData(initialData, kursId));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -301,10 +301,10 @@ const StundenplanForm: React.FC<StundenplanFormProps> = ({
         </button>
         <button
           onClick={handleSubmit}
-          disabled={isLoading}
+          disabled={isPending}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
         >
-          {isLoading ? (
+          {isPending ? (
             <>
               <LoadingSpinner size="sm" />
               <span className="ml-2">Wird gespeichert...</span>

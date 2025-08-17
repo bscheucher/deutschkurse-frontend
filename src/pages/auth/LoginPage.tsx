@@ -15,7 +15,7 @@ const schema = yup.object({
 });
 
 const LoginPage: React.FC = () => {
-  const { login, retryLogin, loginError, clearLoginError, isLoading } = useAuth();
+  const { login, retryLogin, loginError, clearLoginError, isPending } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [lastLoginData, setLastLoginData] = useState<LoginRequest | null>(null);
   
@@ -51,7 +51,7 @@ const LoginPage: React.FC = () => {
   };
 
   const handleRetry = async () => {
-    if (lastLoginData && !isLoading) {
+    if (lastLoginData && !isPending) {
       await retryLogin(lastLoginData);
     }
   };
@@ -112,10 +112,10 @@ const LoginPage: React.FC = () => {
                   <div className="mt-3">
                     <button
                       onClick={handleRetry}
-                      disabled={isLoading}
+                      disabled={isPending}
                       className="inline-flex items-center px-3 py-1 text-sm bg-white rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50"
                     >
-                      <RefreshCw className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-4 h-4 mr-1 ${isPending ? 'animate-spin' : ''}`} />
                       Erneut versuchen
                     </button>
                   </div>
@@ -225,10 +225,10 @@ const LoginPage: React.FC = () => {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isPending}
             className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? (
+            {isPending ? (
               <div className="flex items-center">
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                 Wird angemeldet...
