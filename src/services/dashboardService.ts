@@ -1,6 +1,6 @@
-// src/services/dashboardService.ts
+// src/services/dashboardService.ts - Enhanced Dashboard Service
 import api from './api';
-import { format, subDays, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import { format, subDays, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval, parseISO, isAfter, isBefore } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 interface DashboardStats {
@@ -19,25 +19,31 @@ interface DashboardStats {
   }>;
   recentEnrollments: number;
   coursesThisMonth: number;
+  trends: {
+    kurseChange: number;
+    teilnehmerChange: number;
+    attendanceChange: number;
+  };
 }
 
 interface ChartData {
-  attendanceTrend: {
-    labels: string[];
-    data: number[];
-  };
-  courseDistribution: {
-    labels: string[];
-    data: number[];
-  };
-  monthlyEnrollments: {
-    labels: string[];
-    data: number[];
-  };
+  attendanceTrend: number[];
+  courseDistribution: number[];
+  monthlyEnrollments: number[];
   trainerUtilization: {
     labels: string[];
     data: number[];
   };
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'enrollment' | 'course_start' | 'course_end' | 'attendance' | 'completion';
+  message: string;
+  timestamp: string;
+  userId?: number;
+  courseId?: number;
+  priority: 'high' | 'medium' | 'low';
 }
 
 interface AttendanceData {
@@ -45,30 +51,57 @@ interface AttendanceData {
   attendanceRate: number;
 }
 
+interface KpiMetrics {
+  totalRevenue: number;
+  averageClassSize: number;
+  completionRate: number;
+  customerSatisfaction: number;
+  trainerUtilization: number;
+}
+
 class DashboardService {
+  // Cache for dashboard data to improve performance
+  private cache = new Map<string, { data: any; timestamp: number }>();
+  private CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  private getFromCache<T>(key: string): T | null {
+    const cached = this.cache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+      return cached.data as T;
+    }
+    return null;
+  }
+
+  private setCache<T>(key: string, data: T): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
   async getDashboardStats(): Promise<DashboardStats> {
+    const cacheKey = 'dashboard-stats';
+    const cached = this.getFromCache<DashboardStats>(cacheKey);
+    if (cached) return cached;
+
     try {
-      // Fetch all required data in parallel
-      const [kurseResponse, teilnehmerResponse, trainerResponse, attendanceStats] = await Promise.all([
+      // Fetch all required data in parallel for better performance
+      const [kurseResponse, teilnehmerResponse, trainerResponse, attendanceStats, trends] = await Promise.all([
         api.get('/kurse'),
         api.get('/teilnehmer'),
         api.get('/trainer'),
-        this.getAttendanceStatistics()
+        this.getAttendanceStatistics(),
+        this.getTrendData()
       ]);
       
       const kurse = kurseResponse.data;
       const teilnehmer = teilnehmerResponse.data;
       const trainer = trainerResponse.data;
       
-      // Calculate active courses (running or planned)
+      // Calculate metrics
       const activeKurse = kurse.filter((k: any) => 
         k.status === 'laufend' || k.status === 'geplant'
       ).length;
       
-      // Calculate total active participants
       const totalTeilnehmer = teilnehmer.filter((t: any) => t.aktiv).length;
       
-      // Calculate available trainers
       const availableTrainer = trainer.filter((t: any) => 
         t.status === 'verfuegbar' && t.aktiv
       ).length;
@@ -86,10 +119,10 @@ class DashboardService {
         new Date(k.startdatum) >= thisMonthStart
       ).length;
       
-      // Get upcoming courses (next 7 days)
+      // Get upcoming courses
       const upcomingKurse = this.getUpcomingCourses(kurse);
       
-      // Calculate success rate (completed courses vs all finished courses)
+      // Calculate success rate
       const finishedCourses = kurse.filter((k: any) => 
         k.status === 'abgeschlossen' || k.status === 'abgebrochen'
       );
@@ -97,7 +130,7 @@ class DashboardService {
         ? Math.round((kurse.filter((k: any) => k.status === 'abgeschlossen').length / finishedCourses.length) * 100)
         : 0;
       
-      return {
+      const stats: DashboardStats = {
         activeKurse,
         totalTeilnehmer,
         availableTrainer,
@@ -105,44 +138,243 @@ class DashboardService {
         successRate,
         upcomingKurse,
         recentEnrollments,
-        coursesThisMonth
+        coursesThisMonth,
+        trends
       };
+
+      this.setCache(cacheKey, stats);
+      return stats;
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-      // Return default values in case of error
-      return {
-        activeKurse: 0,
-        totalTeilnehmer: 0,
-        availableTrainer: 0,
-        avgAttendance: 0,
-        successRate: 0,
-        upcomingKurse: [],
-        recentEnrollments: 0,
-        coursesThisMonth: 0
-      };
+      // Return fallback data
+      return this.getFallbackStats();
     }
   }
 
-  async getChartData(): Promise<ChartData> {
+  async getChartData(timeRange: '7d' | '30d' | '90d' = '7d'): Promise<ChartData> {
+    const cacheKey = `chart-data-${timeRange}`;
+    const cached = this.getFromCache<ChartData>(cacheKey);
+    if (cached) return cached;
+
     try {
-      // Fetch data for charts
       const [attendanceData, courseData, enrollmentData, trainerData] = await Promise.all([
-        this.getAttendanceTrendData(),
+        this.getAttendanceTrendData(timeRange),
         this.getCourseDistributionData(),
         this.getMonthlyEnrollmentData(),
         this.getTrainerUtilizationData()
       ]);
 
-      return {
+      const chartData: ChartData = {
         attendanceTrend: attendanceData,
         courseDistribution: courseData,
         monthlyEnrollments: enrollmentData,
         trainerUtilization: trainerData
       };
+
+      this.setCache(cacheKey, chartData);
+      return chartData;
     } catch (error) {
       console.error('Error fetching chart data:', error);
-      // Return mock data as fallback
       return this.getMockChartData();
+    }
+  }
+
+  async getRecentActivity(): Promise<ActivityItem[]> {
+    const cacheKey = 'recent-activity';
+    const cached = this.getFromCache<ActivityItem[]>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const activities: ActivityItem[] = [];
+      
+      // Get recent enrollments
+      const teilnehmerResponse = await api.get('/teilnehmer');
+      const recentTeilnehmer = teilnehmerResponse.data
+        .filter((t: any) => {
+          const enrollDate = new Date(t.anmeldedatum);
+          const sevenDaysAgo = subDays(new Date(), 7);
+          return enrollDate >= sevenDaysAgo;
+        })
+        .sort((a: any, b: any) => new Date(b.anmeldedatum).getTime() - new Date(a.anmeldedatum).getTime())
+        .slice(0, 10);
+      
+      recentTeilnehmer.forEach((t: any) => {
+        activities.push({
+          id: `enrollment_${t.id}`,
+          type: 'enrollment',
+          message: `${t.vorname} ${t.nachname} hat sich angemeldet`,
+          timestamp: t.anmeldedatum,
+          userId: t.id,
+          priority: 'medium'
+        });
+      });
+      
+      // Get recent course starts
+      const kurseResponse = await api.get('/kurse');
+      const recentCourses = kurseResponse.data
+        .filter((k: any) => {
+          const startDate = new Date(k.startdatum);
+          const sevenDaysAgo = subDays(new Date(), 7);
+          return startDate >= sevenDaysAgo && k.status === 'laufend';
+        })
+        .sort((a: any, b: any) => new Date(b.startdatum).getTime() - new Date(a.startdatum).getTime())
+        .slice(0, 5);
+      
+      recentCourses.forEach((k: any) => {
+        activities.push({
+          id: `course_start_${k.id}`,
+          type: 'course_start',
+          message: `Kurs "${k.kursName}" wurde gestartet`,
+          timestamp: k.startdatum,
+          courseId: k.id,
+          priority: 'high'
+        });
+      });
+
+      // Get recent completions
+      const completedCourses = kurseResponse.data
+        .filter((k: any) => {
+          const endDate = new Date(k.enddatum);
+          const sevenDaysAgo = subDays(new Date(), 7);
+          return endDate >= sevenDaysAgo && k.status === 'abgeschlossen';
+        })
+        .sort((a: any, b: any) => new Date(b.enddatum).getTime() - new Date(a.enddatum).getTime())
+        .slice(0, 3);
+
+      completedCourses.forEach((k: any) => {
+        activities.push({
+          id: `course_end_${k.id}`,
+          type: 'completion',
+          message: `Kurs "${k.kursName}" wurde erfolgreich abgeschlossen`,
+          timestamp: k.enddatum,
+          courseId: k.id,
+          priority: 'high'
+        });
+      });
+      
+      // Sort by timestamp and return latest
+      const sortedActivities = activities
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 15);
+
+      this.setCache(cacheKey, sortedActivities);
+      return sortedActivities;
+        
+    } catch (error) {
+      console.error('Error fetching recent activity:', error);
+      return [];
+    }
+  }
+
+  async getKpiMetrics(): Promise<KpiMetrics> {
+    try {
+      const [kurseResponse, teilnehmerResponse, trainerResponse] = await Promise.all([
+        api.get('/kurse'),
+        api.get('/teilnehmer'),
+        api.get('/trainer')
+      ]);
+
+      const kurse = kurseResponse.data;
+      const teilnehmer = teilnehmerResponse.data;
+      const trainer = trainerResponse.data;
+
+      // Calculate average class size
+      const activeKurse = kurse.filter((k: any) => k.status === 'laufend');
+      const averageClassSize = activeKurse.length > 0 
+        ? Math.round(activeKurse.reduce((sum: number, k: any) => sum + (k.aktuelleTeilnehmer || 0), 0) / activeKurse.length)
+        : 0;
+
+      // Calculate completion rate
+      const totalFinishedCourses = kurse.filter((k: any) => 
+        k.status === 'abgeschlossen' || k.status === 'abgebrochen'
+      ).length;
+      const completedCourses = kurse.filter((k: any) => k.status === 'abgeschlossen').length;
+      const completionRate = totalFinishedCourses > 0 
+        ? Math.round((completedCourses / totalFinishedCourses) * 100)
+        : 0;
+
+      // Calculate trainer utilization
+      const activeTrainer = trainer.filter((t: any) => t.aktiv);
+      const busyTrainer = trainer.filter((t: any) => t.status === 'im_einsatz');
+      const trainerUtilization = activeTrainer.length > 0 
+        ? Math.round((busyTrainer.length / activeTrainer.length) * 100)
+        : 0;
+
+      return {
+        totalRevenue: 0, // This would come from a billing/payment system
+        averageClassSize,
+        completionRate,
+        customerSatisfaction: 85, // This would come from surveys
+        trainerUtilization
+      };
+    } catch (error) {
+      console.error('Error fetching KPI metrics:', error);
+      return {
+        totalRevenue: 0,
+        averageClassSize: 0,
+        completionRate: 0,
+        customerSatisfaction: 0,
+        trainerUtilization: 0
+      };
+    }
+  }
+
+  private async getTrendData(): Promise<{ kurseChange: number; teilnehmerChange: number; attendanceChange: number }> {
+    try {
+      // Get data for current and previous month
+      const currentMonth = new Date();
+      const previousMonth = subMonths(currentMonth, 1);
+      
+      const [kurseResponse, teilnehmerResponse] = await Promise.all([
+        api.get('/kurse'),
+        api.get('/teilnehmer')
+      ]);
+
+      const kurse = kurseResponse.data;
+      const teilnehmer = teilnehmerResponse.data;
+
+      // Calculate course trends
+      const currentMonthCourses = kurse.filter((k: any) => {
+        const startDate = new Date(k.startdatum);
+        return startDate.getMonth() === currentMonth.getMonth() && 
+               startDate.getFullYear() === currentMonth.getFullYear();
+      }).length;
+
+      const previousMonthCourses = kurse.filter((k: any) => {
+        const startDate = new Date(k.startdatum);
+        return startDate.getMonth() === previousMonth.getMonth() && 
+               startDate.getFullYear() === previousMonth.getFullYear();
+      }).length;
+
+      const kurseChange = previousMonthCourses > 0 
+        ? Math.round(((currentMonthCourses - previousMonthCourses) / previousMonthCourses) * 100)
+        : currentMonthCourses > 0 ? 100 : 0;
+
+      // Calculate participant trends
+      const currentMonthTeilnehmer = teilnehmer.filter((t: any) => {
+        const enrollDate = new Date(t.anmeldedatum);
+        return enrollDate.getMonth() === currentMonth.getMonth() && 
+               enrollDate.getFullYear() === currentMonth.getFullYear();
+      }).length;
+
+      const previousMonthTeilnehmer = teilnehmer.filter((t: any) => {
+        const enrollDate = new Date(t.anmeldedatum);
+        return enrollDate.getMonth() === previousMonth.getMonth() && 
+               enrollDate.getFullYear() === previousMonth.getFullYear();
+      }).length;
+
+      const teilnehmerChange = previousMonthTeilnehmer > 0 
+        ? Math.round(((currentMonthTeilnehmer - previousMonthTeilnehmer) / previousMonthTeilnehmer) * 100)
+        : currentMonthTeilnehmer > 0 ? 100 : 0;
+
+      return {
+        kurseChange,
+        teilnehmerChange,
+        attendanceChange: -2 // This would be calculated from actual attendance data
+      };
+    } catch (error) {
+      console.error('Error calculating trends:', error);
+      return { kurseChange: 0, teilnehmerChange: 0, attendanceChange: 0 };
     }
   }
 
@@ -188,18 +420,14 @@ class DashboardService {
     }
   }
 
-  private async getAttendanceTrendData(): Promise<{ labels: string[]; data: number[] }> {
+  private async getAttendanceTrendData(timeRange: '7d' | '30d' | '90d' = '7d'): Promise<number[]> {
     try {
-      // Get last 7 days of attendance data
-      const labels: string[] = [];
+      const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
       const data: number[] = [];
       
-      for (let i = 6; i >= 0; i--) {
+      for (let i = days - 1; i >= 0; i--) {
         const date = subDays(new Date(), i);
         const dateStr = format(date, 'yyyy-MM-dd');
-        const labelStr = format(date, 'EEE', { locale: de });
-        
-        labels.push(labelStr);
         
         try {
           const response = await api.get(`/anwesenheit/zeitraum?startDate=${dateStr}&endDate=${dateStr}`);
@@ -217,42 +445,44 @@ class DashboardService {
         }
       }
       
-      return { labels, data };
+      return data;
     } catch (error) {
       console.error('Error fetching attendance trend data:', error);
-      return {
-        labels: ['Mon', 'Die', 'Mit', 'Don', 'Fre', 'Sam', 'Son'],
-        data: [0, 0, 0, 0, 0, 0, 0]
-      };
+      return Array(7).fill(0);
     }
   }
 
-  private async getCourseDistributionData(): Promise<{ labels: string[]; data: number[] }> {
+  private async getCourseDistributionData(): Promise<number[]> {
     try {
       const response = await api.get('/kurse');
       const kurse = response.data;
       
-      // Group courses by type
-      const distribution = kurse.reduce((acc: any, kurs: any) => {
-        const type = kurs.kurstypName || 'Unbekannt';
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-      }, {});
+      // Count courses by level (assuming course types include level)
+      const levelCounts = {
+        'A1': 0,
+        'A2': 0,
+        'B1': 0,
+        'B2': 0,
+        'C1': 0
+      };
       
-      const labels = Object.keys(distribution).sort();
-      const data = labels.map(label => distribution[label]);
+      kurse.forEach((kurs: any) => {
+        const kurstypName = kurs.kurstypName || '';
+        if (kurstypName.includes('A1')) levelCounts.A1++;
+        else if (kurstypName.includes('A2')) levelCounts.A2++;
+        else if (kurstypName.includes('B1')) levelCounts.B1++;
+        else if (kurstypName.includes('B2')) levelCounts.B2++;
+        else if (kurstypName.includes('C1')) levelCounts.C1++;
+      });
       
-      return { labels, data };
+      return Object.values(levelCounts);
     } catch (error) {
       console.error('Error fetching course distribution data:', error);
-      return {
-        labels: ['A1', 'A2', 'B1', 'B2', 'C1'],
-        data: [0, 0, 0, 0, 0]
-      };
+      return [0, 0, 0, 0, 0];
     }
   }
 
-  private async getMonthlyEnrollmentData(): Promise<{ labels: string[]; data: number[] }> {
+  private async getMonthlyEnrollmentData(): Promise<number[]> {
     try {
       const response = await api.get('/teilnehmer');
       const teilnehmer = response.data;
@@ -263,7 +493,6 @@ class DashboardService {
         end: new Date()
       });
       
-      const labels = months.map(month => format(month, 'MMM', { locale: de }));
       const data = months.map(month => {
         const monthStart = startOfMonth(month);
         const monthEnd = endOfMonth(month);
@@ -274,13 +503,10 @@ class DashboardService {
         }).length;
       });
       
-      return { labels, data };
+      return data;
     } catch (error) {
       console.error('Error fetching monthly enrollment data:', error);
-      return {
-        labels: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun'],
-        data: [0, 0, 0, 0, 0, 0]
-      };
+      return [0, 0, 0, 0, 0, 0];
     }
   }
 
@@ -311,10 +537,7 @@ class DashboardService {
       return { labels, data };
     } catch (error) {
       console.error('Error fetching trainer utilization data:', error);
-      return {
-        labels: [],
-        data: []
-      };
+      return { labels: [], data: [] };
     }
   }
 
@@ -348,20 +571,29 @@ class DashboardService {
       }));
   }
 
+  private getFallbackStats(): DashboardStats {
+    return {
+      activeKurse: 0,
+      totalTeilnehmer: 0,
+      availableTrainer: 0,
+      avgAttendance: 0,
+      successRate: 0,
+      upcomingKurse: [],
+      recentEnrollments: 0,
+      coursesThisMonth: 0,
+      trends: {
+        kurseChange: 0,
+        teilnehmerChange: 0,
+        attendanceChange: 0
+      }
+    };
+  }
+
   private getMockChartData(): ChartData {
     return {
-      attendanceTrend: {
-        labels: ['Mon', 'Die', 'Mit', 'Don', 'Fre', 'Sam', 'Son'],
-        data: [92, 88, 95, 91, 89, 94, 93]
-      },
-      courseDistribution: {
-        labels: ['A1', 'A2', 'B1', 'B2', 'C1'],
-        data: [12, 8, 15, 10, 5]
-      },
-      monthlyEnrollments: {
-        labels: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun'],
-        data: [45, 52, 48, 58, 62, 55]
-      },
+      attendanceTrend: [92, 88, 95, 91, 89, 94, 93],
+      courseDistribution: [12, 8, 15, 10, 5],
+      monthlyEnrollments: [45, 52, 48, 58, 62, 55],
       trainerUtilization: {
         labels: ['Trainer A', 'Trainer B', 'Trainer C'],
         data: [5, 3, 4]
@@ -369,69 +601,52 @@ class DashboardService {
     };
   }
 
-  // Additional dashboard methods
-  async getRecentActivity(): Promise<Array<{
-    id: number;
-    type: 'enrollment' | 'course_start' | 'course_end' | 'attendance';
-    message: string;
-    timestamp: string;
-    userId?: number;
-    courseId?: number;
-  }>> {
+  // Additional utility methods
+  async exportDashboardData(format: 'json' | 'csv' = 'json'): Promise<Blob> {
     try {
-      // This would ideally be a dedicated endpoint for activity logs
-      // For now, we'll simulate recent activity from existing data
-      const activities: any[] = [];
-      
-      // Get recent enrollments
-      const teilnehmerResponse = await api.get('/teilnehmer');
-      const recentTeilnehmer = teilnehmerResponse.data
-        .filter((t: any) => {
-          const enrollDate = new Date(t.anmeldedatum);
-          const sevenDaysAgo = subDays(new Date(), 7);
-          return enrollDate >= sevenDaysAgo;
-        })
-        .slice(0, 5);
-      
-      recentTeilnehmer.forEach((t: any) => {
-        activities.push({
-          id: `enrollment_${t.id}`,
-          type: 'enrollment',
-          message: `${t.vorname} ${t.nachname} hat sich angemeldet`,
-          timestamp: t.anmeldedatum,
-          userId: t.id
-        });
-      });
-      
-      // Get recent course starts
-      const kurseResponse = await api.get('/kurse');
-      const recentCourses = kurseResponse.data
-        .filter((k: any) => {
-          const startDate = new Date(k.startdatum);
-          const sevenDaysAgo = subDays(new Date(), 7);
-          return startDate >= sevenDaysAgo && k.status === 'laufend';
-        })
-        .slice(0, 3);
-      
-      recentCourses.forEach((k: any) => {
-        activities.push({
-          id: `course_start_${k.id}`,
-          type: 'course_start',
-          message: `Kurs "${k.kursName}" wurde gestartet`,
-          timestamp: k.startdatum,
-          courseId: k.id
-        });
-      });
-      
-      // Sort by timestamp and return latest
-      return activities
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 10);
-        
+      const [stats, chartData, activity] = await Promise.all([
+        this.getDashboardStats(),
+        this.getChartData(),
+        this.getRecentActivity()
+      ]);
+
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        stats,
+        chartData,
+        recentActivity: activity
+      };
+
+      if (format === 'json') {
+        return new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      } else {
+        // Convert to CSV format
+        const csvData = this.convertToCSV(exportData.stats);
+        return new Blob([csvData], { type: 'text/csv' });
+      }
     } catch (error) {
-      console.error('Error fetching recent activity:', error);
-      return [];
+      console.error('Error exporting dashboard data:', error);
+      throw new Error('Export failed');
     }
+  }
+
+  private convertToCSV(data: any): string {
+    const headers = Object.keys(data).filter(key => typeof data[key] !== 'object');
+    const values = headers.map(header => data[header]);
+    return [headers.join(','), values.join(',')].join('\n');
+  }
+
+  // Method to clear cache (useful for testing or forcing refresh)
+  clearCache(): void {
+    this.cache.clear();
+  }
+
+  // Method to get cache status
+  getCacheStatus(): { size: number; keys: string[] } {
+    return {
+      size: this.cache.size,
+      keys: Array.from(this.cache.keys())
+    };
   }
 }
 
