@@ -1,4 +1,4 @@
-// src/pages/Dashboard.tsx - Simplified Implementation using the hook
+// src/pages/Dashboard.tsx - Bereinigte Implementation ohne ESLint-Warnungen
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -16,11 +16,10 @@ import {
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import { 
   BookOpen, Users, School, Calendar, Target, Award,
-  RefreshCw, Download, Activity, Plus, Settings,
+  RefreshCw, Download, Activity, Plus,
   TrendingUp, TrendingDown, ArrowRight
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { de } from 'date-fns/locale';
 import useDashboard, { useDashboardCalculations } from '../hooks/useDashboard';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
@@ -40,7 +39,6 @@ ChartJS.register(
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   
-  // Use the custom dashboard hook
   const {
     stats,
     chartData,
@@ -60,11 +58,18 @@ const Dashboard: React.FC = () => {
     timeRange: '7d'
   });
 
-  // Use dashboard calculations hook
   const { getKpiSummary } = useDashboardCalculations(stats);
   const kpiSummary = getKpiSummary();
 
-  // Show loading state
+  console.log('Dashboard render:', { 
+    isLoading, 
+    hasErrors, 
+    hasStats: !!stats, 
+    hasChartData: !!chartData,
+    hasActivity: !!recentActivity 
+  });
+
+  // Show loading state only if we have no data at all
   if (isLoading && !stats) {
     return (
       <div className="flex items-center justify-center min-h-64">
@@ -73,7 +78,7 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  // Show error state
+  // Show error state only if we have critical errors and no fallback data
   if (hasErrors && !stats) {
     return (
       <div className="space-y-4">
@@ -88,7 +93,7 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
         <ErrorMessage 
-          message="Dashboard-Daten konnten nicht geladen werden"
+          message="Dashboard-Daten konnten nicht geladen werden. Versuchen Sie es erneut oder wenden Sie sich an den Support."
           type="error"
         />
       </div>

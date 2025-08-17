@@ -1,4 +1,4 @@
-// src/hooks/useDashboard.ts - Custom Dashboard Hook
+// src/hooks/useDashboard.ts - Verbesserte Dashboard Hook
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dashboardService from '../services/dashboardService';
@@ -101,7 +101,7 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>(initialTimeRange);
 
-  // Dashboard stats query
+  // Dashboard stats query mit verbesserter Fehlerbehandlung
   const {
     data: stats,
     isLoading: isLoadingStats,
@@ -109,14 +109,28 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     refetch: refetchStats
   } = useQuery({
     queryKey: ['dashboardStats'],
-    queryFn: dashboardService.getDashboardStats,
+    queryFn: async () => {
+      console.log('Fetching dashboard stats...');
+      const result = await dashboardService.getDashboardStats();
+      console.log('Dashboard stats fetched successfully:', result);
+      return result;
+    },
     refetchInterval: autoRefresh ? refreshInterval : false,
-    retry: 3,
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retry: (failureCount, error) => {
+      console.log(`Dashboard stats fetch attempt ${failureCount + 1} failed:`, error);
+      return failureCount < 2; // Max 3 attempts
+    },
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
     staleTime: 5 * 60 * 1000, // 5 minutes
+    onError: (error) => {
+      console.error('Dashboard stats query error:', error);
+    },
+    onSuccess: (data) => {
+      console.log('Dashboard stats query successful:', data);
+    }
   });
 
-  // Chart data query
+  // Chart data query mit verbesserter Fehlerbehandlung
   const {
     data: chartData,
     isLoading: isLoadingCharts,
@@ -124,12 +138,25 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     refetch: refetchCharts
   } = useQuery({
     queryKey: ['dashboardCharts', timeRange],
-    queryFn: () => dashboardService.getChartData(timeRange),
-    refetchInterval: autoRefresh ? refreshInterval * 2 : false, // Less frequent updates for charts
+    queryFn: async () => {
+      console.log(`Fetching chart data for ${timeRange}...`);
+      const result = await dashboardService.getChartData(timeRange);
+      console.log('Chart data fetched successfully');
+      return result;
+    },
+    refetchInterval: autoRefresh ? refreshInterval * 2 : false,
+    retry: (failureCount, error) => {
+      console.log(`Chart data fetch attempt ${failureCount + 1} failed:`, error);
+      return failureCount < 2;
+    },
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
     staleTime: 10 * 60 * 1000, // 10 minutes
+    onError: (error) => {
+      console.error('Chart data query error:', error);
+    }
   });
 
-  // Recent activity query
+  // Recent activity query mit verbesserter Fehlerbehandlung
   const {
     data: recentActivity,
     isLoading: isLoadingActivity,
@@ -137,23 +164,38 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     refetch: refetchActivity
   } = useQuery({
     queryKey: ['recentActivity'],
-    queryFn: dashboardService.getRecentActivity,
-    refetchInterval: autoRefresh ? refreshInterval / 2 : false, // More frequent updates for activity
+    queryFn: async () => {
+      console.log('Fetching recent activity...');
+      const result = await dashboardService.getRecentActivity();
+      console.log('Recent activity fetched successfully');
+      return result;
+    },
+    refetchInterval: autoRefresh ? refreshInterval / 2 : false,
+    retry: (failureCount, error) => {
+      console.log(`Activity fetch attempt ${failureCount + 1} failed:`, error);
+      return failureCount < 1; // Less retries for activity data
+    },
+    retryDelay: 2000,
     staleTime: 2 * 60 * 1000, // 2 minutes
+    onError: (error) => {
+      console.warn('Activity data query error (non-critical):', error);
+    }
   });
 
   // Refresh all data
   const refresh = useCallback(async () => {
+    console.log('Manually refreshing all dashboard data...');
     setIsRefreshing(true);
     try {
-      await Promise.all([
+      await Promise.allSettled([
         refetchStats(),
         refetchCharts(),
         refetchActivity()
       ]);
+      console.log('Manual refresh completed successfully');
       toast.success('Dashboard erfolgreich aktualisiert');
     } catch (error) {
-      console.error('Error refreshing dashboard:', error);
+      console.error('Error during manual refresh:', error);
       toast.error('Fehler beim Aktualisieren des Dashboards');
     } finally {
       setIsRefreshing(false);
@@ -162,33 +204,39 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
 
   // Individual refresh functions
   const refreshStats = useCallback(async () => {
+    console.log('Refreshing stats...');
     try {
       await refetchStats();
       toast.success('Statistiken aktualisiert');
     } catch (error) {
+      console.error('Error refreshing stats:', error);
       toast.error('Fehler beim Aktualisieren der Statistiken');
     }
   }, [refetchStats]);
 
   const refreshCharts = useCallback(async () => {
+    console.log('Refreshing charts...');
     try {
       await refetchCharts();
       toast.success('Diagramme aktualisiert');
     } catch (error) {
+      console.error('Error refreshing charts:', error);
       toast.error('Fehler beim Aktualisieren der Diagramme');
     }
   }, [refetchCharts]);
 
   const refreshActivity = useCallback(async () => {
+    console.log('Refreshing activity...');
     try {
       await refetchActivity();
     } catch (error) {
-      console.error('Error refreshing activity:', error);
+      console.warn('Error refreshing activity (non-critical):', error);
     }
   }, [refetchActivity]);
 
   // Export functionality
   const exportData = useCallback(async (format: 'json' | 'csv' = 'json') => {
+    console.log(`Exporting dashboard data as ${format}...`);
     try {
       const blob = await dashboardService.exportDashboardData(format);
       const url = URL.createObjectURL(blob);
@@ -211,6 +259,7 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   const toggleAutoRefresh = useCallback(() => {
     setAutoRefresh(prev => {
       const newValue = !prev;
+      console.log(`Auto-refresh ${newValue ? 'enabled' : 'disabled'}`);
       toast.success(`Auto-Update ${newValue ? 'aktiviert' : 'deaktiviert'}`);
       return newValue;
     });
@@ -218,8 +267,8 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
 
   // Update time range and invalidate chart queries
   const handleSetTimeRange = useCallback((range: '7d' | '30d' | '90d') => {
+    console.log(`Setting time range to: ${range}`);
     setTimeRange(range);
-    // Invalidate chart queries to trigger refetch with new time range
     queryClient.invalidateQueries({ queryKey: ['dashboardCharts'] });
   }, [queryClient]);
 
@@ -228,14 +277,12 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   const hasErrors = Boolean(statsError || chartsError || activityError);
   const isLoading = isLoadingStats || isLoadingCharts || isLoadingActivity;
 
-  // Effect to handle visibility change (pause auto-refresh when tab is not visible)
+  // Effect to handle visibility change
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && autoRefresh) {
-        // Optionally pause auto-refresh when tab is not visible
         console.log('Tab hidden, auto-refresh continues...');
       } else if (!document.hidden && autoRefresh) {
-        // Optionally trigger a refresh when tab becomes visible again
         console.log('Tab visible, auto-refresh active...');
       }
     };
@@ -246,22 +293,24 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
     };
   }, [autoRefresh]);
 
-  // Effect to show error notifications
+  // Effect to show error notifications (weniger aggressiv)
   useEffect(() => {
-    if (statsError && !isLoadingStats) {
+    if (statsError && !isLoadingStats && !stats) {
+      console.error('Critical error loading dashboard stats:', statsError);
       toast.error('Fehler beim Laden der Dashboard-Statistiken');
     }
-  }, [statsError, isLoadingStats]);
+  }, [statsError, isLoadingStats, stats]);
 
   useEffect(() => {
-    if (chartsError && !isLoadingCharts) {
+    if (chartsError && !isLoadingCharts && !chartData) {
+      console.error('Error loading chart data:', chartsError);
       toast.error('Fehler beim Laden der Diagramm-Daten');
     }
-  }, [chartsError, isLoadingCharts]);
+  }, [chartsError, isLoadingCharts, chartData]);
 
   useEffect(() => {
     if (activityError && !isLoadingActivity) {
-      console.warn('Error loading activity data:', activityError);
+      console.warn('Non-critical error loading activity data:', activityError);
       // Don't show toast for activity errors as they're less critical
     }
   }, [activityError, isLoadingActivity]);
@@ -303,7 +352,7 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   };
 };
 
-// Additional hook for dashboard statistics calculations
+// Hook für Dashboard-Berechnungen
 export const useDashboardCalculations = (stats?: DashboardStats) => {
   const getAttendanceStatus = useCallback((rate: number) => {
     if (rate >= 90) return { status: 'excellent', color: 'green', text: 'Ausgezeichnet' };
@@ -337,9 +386,8 @@ export const useDashboardCalculations = (stats?: DashboardStats) => {
       participantsTrend: getTrendIndicator(stats.trends.teilnehmerChange),
       attendanceTrend: getTrendIndicator(stats.trends.attendanceChange),
       
-      // Additional calculations
       capacityUtilization: stats.activeKurse > 0 
-        ? Math.round((stats.totalTeilnehmer / (stats.activeKurse * 15)) * 100) // Assuming avg 15 per course
+        ? Math.round((stats.totalTeilnehmer / (stats.activeKurse * 15)) * 100)
         : 0,
       
       trainerCoverage: stats.availableTrainer > 0 
@@ -356,25 +404,39 @@ export const useDashboardCalculations = (stats?: DashboardStats) => {
   };
 };
 
-// Hook for dashboard preferences/settings
+// Hook für Dashboard-Einstellungen
 export const useDashboardSettings = () => {
   const [settings, setSettings] = useState(() => {
-    // Load settings from localStorage
-    const saved = localStorage.getItem('dashboard-settings');
-    return saved ? JSON.parse(saved) : {
-      autoRefresh: true,
-      refreshInterval: 30000,
-      defaultTimeRange: '7d',
-      showWelcomeMessage: true,
-      compactMode: false,
-      theme: 'light'
-    };
+    try {
+      const saved = localStorage.getItem('dashboard-settings');
+      return saved ? JSON.parse(saved) : {
+        autoRefresh: true,
+        refreshInterval: 30000,
+        defaultTimeRange: '7d',
+        showWelcomeMessage: true,
+        compactMode: false,
+        theme: 'light'
+      };
+    } catch {
+      return {
+        autoRefresh: true,
+        refreshInterval: 30000,
+        defaultTimeRange: '7d',
+        showWelcomeMessage: true,
+        compactMode: false,
+        theme: 'light'
+      };
+    }
   });
 
   const updateSettings = useCallback((newSettings: Partial<typeof settings>) => {
     setSettings((prev: any) => {
       const updated = { ...prev, ...newSettings };
-      localStorage.setItem('dashboard-settings', JSON.stringify(updated));
+      try {
+        localStorage.setItem('dashboard-settings', JSON.stringify(updated));
+      } catch (error) {
+        console.warn('Could not save dashboard settings:', error);
+      }
       return updated;
     });
   }, []);
@@ -389,7 +451,11 @@ export const useDashboardSettings = () => {
       theme: 'light'
     };
     setSettings(defaultSettings);
-    localStorage.setItem('dashboard-settings', JSON.stringify(defaultSettings));
+    try {
+      localStorage.setItem('dashboard-settings', JSON.stringify(defaultSettings));
+    } catch (error) {
+      console.warn('Could not save default dashboard settings:', error);
+    }
   }, []);
 
   return {
