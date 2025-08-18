@@ -9,6 +9,7 @@ import Layout from './components/common/Layout';
 import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Pages
+import Unauthorized from './pages/Unauthorized';
 import LoginPage from './pages/auth/LoginPage';
 import Dashboard from './pages/Dashboard';
 import Kurse from './pages/Kurse';
@@ -50,6 +51,7 @@ function App() {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
               <Route path="/" element={<Navigate to="/dashboard" />} />
               
               <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
