@@ -10,9 +10,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import teilnehmerService from '../services/teilnehmerService';
-import ExportService, { ExportColumn, ExportFormat, CommonFormatters } from '../services/exportService';
+import ExportService, { ExportColumn, type ExportFormat, CommonFormatters } from '../services/exportService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { Teilnehmer } from '../types/teilnehmer.types';
 
 const TeilnehmerPage: React.FC = () => {
   const navigate = useNavigate();
@@ -72,7 +71,7 @@ const TeilnehmerPage: React.FC = () => {
   ];
 
   // Export function using the ExportService
-  const handleExport = async (format: ExportFormat) => {
+  const handleExport = async (exportFormat: ExportFormat) => {
     if (!filteredTeilnehmer || filteredTeilnehmer.length === 0) {
       toast.error('Keine Teilnehmer zum Exportieren vorhanden');
       return;
@@ -86,9 +85,9 @@ const TeilnehmerPage: React.FC = () => {
       const filename = `teilnehmer_${timestamp}`;
       
       // Get file size estimate
-      const estimatedSize = ExportService.getFileSizeEstimate(filteredTeilnehmer, format);
+      const estimatedSize = ExportService.getFileSizeEstimate(filteredTeilnehmer, exportFormat);
       
-      await ExportService.export(format, filteredTeilnehmer, exportColumns, {
+      await ExportService.export(exportFormat, filteredTeilnehmer, exportColumns, {
         filename,
         title: 'Teilnehmer Liste',
         includeTimestamp: false // Already included in filename
@@ -103,7 +102,7 @@ const TeilnehmerPage: React.FC = () => {
       };
 
       toast.success(
-        `${filteredTeilnehmer.length} Teilnehmer als ${formatNames[format]} exportiert (${estimatedSize})`,
+        `${filteredTeilnehmer.length} Teilnehmer als ${formatNames[exportFormat]} exportiert (${estimatedSize})`,
         { duration: 4000 }
       );
 
