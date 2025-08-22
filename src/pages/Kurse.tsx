@@ -1,14 +1,16 @@
 // src/pages/Kurse.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { 
   Plus, Search, Filter, Download, Edit, Trash2, Eye,
-  Calendar, Users, MapPin
+  Calendar, Users, MapPin, ChevronDown, FileText, File,
+  AlertCircle
 } from 'lucide-react';
 import kursService from '../services/kursService';
+import ExportService, { ExportColumn, type ExportFormat, CommonFormatters } from '../services/exportService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import StatusBadge from '../components/common/StatusBadge';
 import Modal from '../components/common/Modal';
@@ -22,6 +24,9 @@ const Kurse: React.FC = () => {
   const [editingKurs, setEditingKurs] = useState<Kurs | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const exportButtonRef = useRef<HTMLDivElement>(null);
 
   // Fetch kurse
   const { data: kurse, isPending } = useQuery({
@@ -73,94 +78,94 @@ const Kurse: React.FC = () => {
   });
 
   // Helper function to convert form data to CreateKursDto
-const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
-  console.log('Converting form data to DTO:', formData);
-  
-  // Validate required fields exist
-  if (!formData.kursName || !formData.kurstypId || !formData.kursraumId || 
-      !formData.trainerId || !formData.startdatum || !formData.enddatum || 
-      !formData.maxTeilnehmer || !formData.status) {
-    console.error('Missing required fields:', {
-      kursName: !!formData.kursName,
-      kurstypId: !!formData.kurstypId,
-      kursraumId: !!formData.kursraumId,
-      trainerId: !!formData.trainerId,
-      startdatum: !!formData.startdatum,
-      enddatum: !!formData.enddatum,
-      maxTeilnehmer: !!formData.maxTeilnehmer,
-      status: !!formData.status
-    });
-    throw new Error('Required fields are missing');
-  }
+  const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
+    console.log('Converting form data to DTO:', formData);
+    
+    // Validate required fields exist
+    if (!formData.kursName || !formData.kurstypId || !formData.kursraumId || 
+        !formData.trainerId || !formData.startdatum || !formData.enddatum || 
+        !formData.maxTeilnehmer || !formData.status) {
+      console.error('Missing required fields:', {
+        kursName: !!formData.kursName,
+        kurstypId: !!formData.kurstypId,
+        kursraumId: !!formData.kursraumId,
+        trainerId: !!formData.trainerId,
+        startdatum: !!formData.startdatum,
+        enddatum: !!formData.enddatum,
+        maxTeilnehmer: !!formData.maxTeilnehmer,
+        status: !!formData.status
+      });
+      throw new Error('Required fields are missing');
+    }
 
-  // Convert IDs to numbers with validation
-  const kurstypId = Number(formData.kurstypId);
-  const kursraumId = Number(formData.kursraumId);
-  const trainerId = Number(formData.trainerId);
-  const maxTeilnehmer = Number(formData.maxTeilnehmer);
+    // Convert IDs to numbers with validation
+    const kurstypId = Number(formData.kurstypId);
+    const kursraumId = Number(formData.kursraumId);
+    const trainerId = Number(formData.trainerId);
+    const maxTeilnehmer = Number(formData.maxTeilnehmer);
 
-  // Validate that numeric conversions were successful
-  if (isNaN(kurstypId) || kurstypId <= 0) {
-    console.error('Invalid kurstypId:', formData.kurstypId);
-    throw new Error('Ungültiger Kurstyp');
-  }
-  
-  if (isNaN(kursraumId) || kursraumId <= 0) {
-    console.error('Invalid kursraumId:', formData.kursraumId);
-    throw new Error('Ungültiger Kursraum');
-  }
-  
-  if (isNaN(trainerId) || trainerId <= 0) {
-    console.error('Invalid trainerId:', formData.trainerId);
-    throw new Error('Ungültiger Trainer');
-  }
-  
-  if (isNaN(maxTeilnehmer) || maxTeilnehmer < 1) {
-    console.error('Invalid maxTeilnehmer:', formData.maxTeilnehmer);
-    throw new Error('Ungültige maximale Teilnehmerzahl');
-  }
+    // Validate that numeric conversions were successful
+    if (isNaN(kurstypId) || kurstypId <= 0) {
+      console.error('Invalid kurstypId:', formData.kurstypId);
+      throw new Error('Ungültiger Kurstyp');
+    }
+    
+    if (isNaN(kursraumId) || kursraumId <= 0) {
+      console.error('Invalid kursraumId:', formData.kursraumId);
+      throw new Error('Ungültiger Kursraum');
+    }
+    
+    if (isNaN(trainerId) || trainerId <= 0) {
+      console.error('Invalid trainerId:', formData.trainerId);
+      throw new Error('Ungültiger Trainer');
+    }
+    
+    if (isNaN(maxTeilnehmer) || maxTeilnehmer < 1) {
+      console.error('Invalid maxTeilnehmer:', formData.maxTeilnehmer);
+      throw new Error('Ungültige maximale Teilnehmerzahl');
+    }
 
-  // Validate status is one of the allowed values
-  const validStatuses = ['geplant', 'laufend', 'abgeschlossen', 'abgebrochen'];
-  if (!validStatuses.includes(formData.status)) {
-    console.error('Invalid status:', formData.status);
-    throw new Error('Ungültiger Status');
-  }
+    // Validate status is one of the allowed values
+    const validStatuses = ['geplant', 'laufend', 'abgeschlossen', 'abgebrochen'];
+    if (!validStatuses.includes(formData.status)) {
+      console.error('Invalid status:', formData.status);
+      throw new Error('Ungültiger Status');
+    }
 
-  // Validate dates
-  const startDate = new Date(formData.startdatum);
-  const endDate = new Date(formData.enddatum);
-  
-  if (isNaN(startDate.getTime())) {
-    console.error('Invalid startdatum:', formData.startdatum);
-    throw new Error('Ungültiges Startdatum');
-  }
-  
-  if (isNaN(endDate.getTime())) {
-    console.error('Invalid enddatum:', formData.enddatum);
-    throw new Error('Ungültiges Enddatum');
-  }
-  
-  if (endDate < startDate) {
-    console.error('End date before start date');
-    throw new Error('Enddatum muss nach dem Startdatum liegen');
-  }
+    // Validate dates
+    const startDate = new Date(formData.startdatum);
+    const endDate = new Date(formData.enddatum);
+    
+    if (isNaN(startDate.getTime())) {
+      console.error('Invalid startdatum:', formData.startdatum);
+      throw new Error('Ungültiges Startdatum');
+    }
+    
+    if (isNaN(endDate.getTime())) {
+      console.error('Invalid enddatum:', formData.enddatum);
+      throw new Error('Ungültiges Enddatum');
+    }
+    
+    if (endDate < startDate) {
+      console.error('End date before start date');
+      throw new Error('Enddatum muss nach dem Startdatum liegen');
+    }
 
-  const dto: CreateKursDto = {
-    kursName: formData.kursName.trim(),
-    kurstypId,
-    kursraumId,
-    trainerId,
-    startdatum: formData.startdatum,
-    enddatum: formData.enddatum,
-    maxTeilnehmer,
-    status: formData.status,
-    beschreibung: formData.beschreibung?.trim() || undefined
+    const dto: CreateKursDto = {
+      kursName: formData.kursName.trim(),
+      kurstypId,
+      kursraumId,
+      trainerId,
+      startdatum: formData.startdatum,
+      enddatum: formData.enddatum,
+      maxTeilnehmer,
+      status: formData.status,
+      beschreibung: formData.beschreibung?.trim() || undefined
+    };
+    
+    console.log('Successfully converted DTO:', dto);
+    return dto;
   };
-  
-  console.log('Successfully converted DTO:', dto);
-  return dto;
-};
 
   const handleSubmit = (data: Partial<Kurs>) => {
     console.log('Kurse page received form data:', data);
@@ -209,6 +214,132 @@ const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
     return matchesSearch && matchesStatus;
   });
 
+  // Define export columns
+  const exportColumns: ExportColumn[] = [
+    { key: 'id', header: 'ID', width: 60 },
+    { key: 'kursName', header: 'Kursname', width: 200 },
+    { key: 'kurstypName', header: 'Kurstyp', width: 120 },
+    { key: 'kursraumName', header: 'Raum', width: 100 },
+    { key: 'trainerName', header: 'Trainer', width: 150 },
+    { key: 'startdatum', header: 'Startdatum', formatter: CommonFormatters.date, width: 100 },
+    { key: 'enddatum', header: 'Enddatum', formatter: CommonFormatters.date, width: 100 },
+    { key: 'maxTeilnehmer', header: 'Max. Teilnehmer', formatter: CommonFormatters.number, width: 80 },
+    { key: 'aktuelleTeilnehmer', header: 'Akt. Teilnehmer', formatter: CommonFormatters.number, width: 80 },
+    { 
+      key: 'status', 
+      header: 'Status', 
+      formatter: (value) => {
+        switch(value) {
+          case 'geplant': return 'Geplant';
+          case 'laufend': return 'Laufend';
+          case 'abgeschlossen': return 'Abgeschlossen';
+          case 'abgebrochen': return 'Abgebrochen';
+          default: return value;
+        }
+      },
+      width: 100 
+    },
+    { key: 'beschreibung', header: 'Beschreibung', formatter: CommonFormatters.truncate(100), width: 200 }
+  ];
+
+  // Export function using the ExportService
+  const handleExport = async (exportFormat: ExportFormat) => {
+    if (!filteredKurse || filteredKurse.length === 0) {
+      toast.error('Keine Kurse zum Exportieren vorhanden');
+      return;
+    }
+
+    setIsExporting(true);
+    setShowExportDropdown(false);
+
+    try {
+      const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
+      const filename = `kurse_${timestamp}`;
+      
+      // Get file size estimate
+      const estimatedSize = ExportService.getFileSizeEstimate(filteredKurse, exportFormat);
+      
+      await ExportService.export(exportFormat, filteredKurse, exportColumns, {
+        filename,
+        title: 'Kursliste',
+        includeTimestamp: false // Already included in filename
+      });
+
+      // Show success message with details
+      const formatNames = {
+        csv: 'CSV (Excel)',
+        txt: 'Text',
+        pdf: 'PDF',
+        json: 'JSON'
+      };
+
+      toast.success(
+        `${filteredKurse.length} Kurse als ${formatNames[exportFormat]} exportiert (${estimatedSize})`,
+        { duration: 4000 }
+      );
+
+    } catch (error: any) {
+      console.error('Export error:', error);
+      toast.error(error.message || 'Fehler beim Exportieren der Daten');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export multiple formats at once
+  const handleBatchExport = async () => {
+    if (!filteredKurse || filteredKurse.length === 0) {
+      toast.error('Keine Kurse zum Exportieren vorhanden');
+      return;
+    }
+
+    setIsExporting(true);
+    setShowExportDropdown(false);
+
+    try {
+      const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
+      
+      await ExportService.exportBatch([
+        {
+          name: `kurse_csv_${timestamp}`,
+          data: filteredKurse,
+          columns: exportColumns,
+          format: 'csv',
+          options: { title: 'Kursliste (CSV)' }
+        },
+        {
+          name: `kurse_json_${timestamp}`,
+          data: filteredKurse,
+          columns: exportColumns,
+          format: 'json',
+          options: { title: 'Kursliste (JSON)' }
+        }
+      ]);
+
+      toast.success(`${filteredKurse.length} Kurse in mehreren Formaten exportiert`);
+
+    } catch (error: any) {
+      console.error('Batch export error:', error);
+      toast.error('Fehler beim Batch-Export der Daten');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportButtonRef.current && !exportButtonRef.current.contains(event.target as Node)) {
+        setShowExportDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   if (isPending) return <LoadingSpinner />;
 
   return (
@@ -216,7 +347,12 @@ const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Kurse</h1>
-          <p className="text-gray-600 mt-1">Verwalten Sie alle Deutschkurse</p>
+          <p className="text-gray-600 mt-1">
+            {filteredKurse?.length || 0} von {kurse?.length || 0} Kursen
+            {searchTerm && (
+              <span className="text-blue-600"> • Gefiltert nach "{searchTerm}"</span>
+            )}
+          </p>
         </div>
         <button
           onClick={() => {
@@ -260,12 +396,108 @@ const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
               </select>
             </div>
             
-            <button className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </button>
+            {/* Enhanced Export Dropdown */}
+            <div className="relative" ref={exportButtonRef}>
+              <button
+                onClick={() => setShowExportDropdown(!showExportDropdown)}
+                disabled={isExporting || !filteredKurse?.length}
+                className="flex items-center justify-center w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className={`w-4 h-4 mr-2 ${isExporting ? 'animate-pulse' : ''}`} />
+                {isExporting ? 'Exportiere...' : 'Export'}
+                <ChevronDown className="w-4 h-4 ml-1" />
+              </button>
+
+              {showExportDropdown && (
+                <div className="absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                  <div className="py-1">
+                    {/* Export info */}
+                    <div className="px-4 py-2 bg-blue-50 border-b">
+                      <div className="text-xs font-medium text-blue-900">
+                        {filteredKurse?.length || 0} Kurse exportieren
+                      </div>
+                      <div className="text-xs text-blue-600">
+                        Geschätzte Größe: {ExportService.getFileSizeEstimate(filteredKurse || [], 'csv')}
+                      </div>
+                    </div>
+
+                    {/* Export options */}
+                    <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                      Export Format
+                    </div>
+                    
+                    <button
+                      onClick={() => handleExport('csv')}
+                      className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <FileText className="w-4 h-4 mr-3 text-green-600" />
+                      <div className="text-left flex-1">
+                        <div className="font-medium">CSV (Excel)</div>
+                        <div className="text-xs text-gray-500">Komma-getrennte Werte, Excel-kompatibel</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleExport('txt')}
+                      className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <File className="w-4 h-4 mr-3 text-blue-600" />
+                      <div className="text-left flex-1">
+                        <div className="font-medium">Text (.txt)</div>
+                        <div className="text-xs text-gray-500">Formatierter, lesbarer Text</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleExport('pdf')}
+                      className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <FileText className="w-4 h-4 mr-3 text-red-600" />
+                      <div className="text-left flex-1">
+                        <div className="font-medium">PDF (Drucken)</div>
+                        <div className="text-xs text-gray-500">Tabelle zum Drucken oder Speichern</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleExport('json')}
+                      className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <File className="w-4 h-4 mr-3 text-purple-600" />
+                      <div className="text-left flex-1">
+                        <div className="font-medium">JSON</div>
+                        <div className="text-xs text-gray-500">Strukturierte Daten für Entwickler</div>
+                      </div>
+                    </button>
+
+                    <div className="border-t">
+                      <button
+                        onClick={handleBatchExport}
+                        className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <Download className="w-4 h-4 mr-3 text-orange-600" />
+                        <div className="text-left flex-1">
+                          <div className="font-medium">Batch Export</div>
+                          <div className="text-xs text-gray-500">CSV + JSON gleichzeitig</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Export warning if filtered */}
+        {(searchTerm || statusFilter !== 'all') && filteredKurse && filteredKurse.length > 0 && (
+          <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200">
+            <div className="flex items-center text-sm text-yellow-800">
+              <AlertCircle className="w-4 h-4 mr-2" />
+              Export enthält nur die {filteredKurse.length} gefilterten Kurse von insgesamt {kurse?.length || 0}
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto">
@@ -368,11 +600,30 @@ const convertToCreateKursDto = (formData: Partial<Kurs>): CreateKursDto => {
           </table>
           
           {filteredKurse?.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              {searchTerm || statusFilter !== 'all' 
-                ? 'Keine Kurse entsprechen den Filterkriterien' 
-                : 'Noch keine Kurse erstellt'
-              }
+            <div className="text-center py-12 text-gray-500">
+              <div className="mx-auto h-12 w-12 text-gray-300 mb-4">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Kurse</h3>
+              <p>
+                {searchTerm || statusFilter !== 'all' 
+                  ? 'Keine Kurse entsprechen den Filterkriterien' 
+                  : 'Noch keine Kurse erstellt'
+                }
+              </p>
+              {(searchTerm || statusFilter !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('all');
+                  }}
+                  className="mt-3 text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  Filter zurücksetzen
+                </button>
+              )}
             </div>
           )}
         </div>
