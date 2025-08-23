@@ -1,5 +1,5 @@
-// src/pages/Dashboard.tsx - Bereinigte Implementation ohne ESLint-Warnungen
-import React from 'react';
+// Enhanced Dashboard.tsx with complete implementation including all components
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Chart as ChartJS,
@@ -17,7 +17,8 @@ import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import { 
   BookOpen, Users, School, Calendar, Target, Award,
   RefreshCw, Download, Activity, Plus,
-  TrendingUp, TrendingDown, ArrowRight
+  TrendingUp, TrendingDown, ArrowRight, Info,
+  CheckCircle, AlertTriangle, XCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import useDashboard, { useDashboardCalculations } from '../hooks/useDashboard';
@@ -36,8 +37,39 @@ ChartJS.register(
   Legend
 );
 
+// Extended interface for stats to include attendanceDetails
+interface ExtendedDashboardStats {
+  activeKurse: number;
+  totalTeilnehmer: number;
+  availableTrainer: number;
+  avgAttendance: number;
+  successRate: number;
+  upcomingKurse: any[];
+  recentEnrollments: number;
+  coursesThisMonth: number;
+  trends: {
+    kurseChange: number;
+    teilnehmerChange: number;
+    attendanceChange: number;
+  };
+  attendanceDetails?: {
+    totalSessions: number;
+    presentSessions: number;
+    excusedSessions: number;
+    unexcusedSessions: number;
+    averageByWeekday: Record<string, number>;
+    courseAttendanceRates: Array<{
+      kursId: number;
+      kursName: string;
+      attendanceRate: number;
+      totalSessions: number;
+    }>;
+  };
+}
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [showAttendanceDetails, setShowAttendanceDetails] = useState(false);
   
   const {
     stats,
@@ -100,6 +132,9 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  // Cast stats to extended type for attendanceDetails access
+  const extendedStats = stats as ExtendedDashboardStats;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -116,24 +151,38 @@ const Dashboard: React.FC = () => {
       {/* Quick Actions */}
       <QuickActions onNavigate={navigate} />
 
-      {/* Stats Grid */}
+      {/* Stats Grid with Enhanced Attendance */}
       {stats && (
         <StatsGrid 
-          stats={stats} 
+          stats={extendedStats} 
           kpiSummary={kpiSummary}
           onNavigate={navigate}
+          onShowAttendanceDetails={() => setShowAttendanceDetails(true)}
         />
       )}
 
-      {/* Charts */}
+      {/* Enhanced Attendance Details Modal */}
+      {showAttendanceDetails && extendedStats?.attendanceDetails && (
+        <AttendanceDetailsModal
+          attendanceDetails={extendedStats.attendanceDetails}
+          avgAttendance={extendedStats.avgAttendance}
+          onClose={() => setShowAttendanceDetails(false)}
+        />
+      )}
+
+      {/* Charts with Enhanced Attendance Visualization */}
       {chartData && (
-        <ChartsSection chartData={chartData} timeRange={timeRange} />
+        <EnhancedChartsSection 
+          chartData={chartData} 
+          timeRange={timeRange}
+          attendanceDetails={extendedStats?.attendanceDetails}
+        />
       )}
 
       {/* Recent Activity & Upcoming Courses */}
       <BottomSection 
         recentActivity={recentActivity}
-        upcomingCourses={stats?.upcomingKurse}
+        upcomingCourses={extendedStats?.upcomingKurse}
         onNavigate={navigate}
       />
     </div>
@@ -273,14 +322,20 @@ const QuickActionButton: React.FC<{
   );
 };
 
-// Stats Grid Component
+// Enhanced Stats Grid with better attendance visualization
 interface StatsGridProps {
-  stats: any;
+  stats: ExtendedDashboardStats;
   kpiSummary: any;
   onNavigate: (path: string) => void;
+  onShowAttendanceDetails?: () => void;
 }
 
-const StatsGrid: React.FC<StatsGridProps> = ({ stats, kpiSummary, onNavigate }) => (
+const StatsGrid: React.FC<StatsGridProps> = ({ 
+  stats, 
+  kpiSummary, 
+  onNavigate, 
+  onShowAttendanceDetails 
+}) => (
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
     <StatCard
       title="Aktive Kurse"
@@ -298,14 +353,14 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, kpiSummary, onNavigate }) 
       color="purple"
       onClick={() => onNavigate('/teilnehmer')}
     />
-    <StatCard
+    <EnhancedAttendanceStatCard
       title="Ø Anwesenheit"
-      value={`${stats.avgAttendance}%`}
+      avgAttendance={stats.avgAttendance}
       change={stats.trends.attendanceChange}
-      icon={Target}
-      color="green"
-      status={kpiSummary?.attendance}
+      attendanceDetails={stats.attendanceDetails}
+      kpiStatus={kpiSummary?.attendance}
       onClick={() => onNavigate('/anwesenheit')}
+      onShowDetails={onShowAttendanceDetails}
     />
     <StatCard
       title="Erfolgsquote"
@@ -318,6 +373,7 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, kpiSummary, onNavigate }) 
   </div>
 );
 
+// Regular StatCard Component
 const StatCard: React.FC<{
   title: string;
   value: string | number;
@@ -375,13 +431,189 @@ const StatCard: React.FC<{
   );
 };
 
-// Charts Section Component
-interface ChartsSectionProps {
+// Enhanced Attendance Stat Card with more details
+const EnhancedAttendanceStatCard: React.FC<{
+  title: string;
+  avgAttendance: number;
+  change?: number;
+  attendanceDetails?: ExtendedDashboardStats['attendanceDetails'];
+  kpiStatus?: any;
+  onClick?: () => void;
+  onShowDetails?: () => void;
+}> = ({ title, avgAttendance, change, attendanceDetails, kpiStatus, onClick, onShowDetails }) => {
+  const getAttendanceColor = (rate: number) => {
+    if (rate >= 90) return 'text-green-600';
+    if (rate >= 80) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getAttendanceIcon = (rate: number) => {
+    if (rate >= 90) return CheckCircle;
+    if (rate >= 80) return AlertTriangle;
+    return XCircle;
+  };
+
+  const AttendanceIcon = getAttendanceIcon(avgAttendance);
+
+  return (
+    <div 
+      className="bg-white p-6 rounded-lg shadow cursor-pointer hover:shadow-md transition-shadow"
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex-1">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-600">{title}</p>
+            {onShowDetails && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowDetails();
+                }}
+                className="text-gray-400 hover:text-blue-600 p-1"
+                title="Details anzeigen"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <p className={`text-2xl font-bold ${getAttendanceColor(avgAttendance)}`}>
+              {avgAttendance}%
+            </p>
+            <AttendanceIcon className={`w-5 h-5 ${getAttendanceColor(avgAttendance)}`} />
+          </div>
+          
+          {change !== undefined && (
+            <div className="flex items-center mt-1">
+              {change > 0 ? (
+                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+              ) : change < 0 ? (
+                <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+              ) : null}
+              <span className={`text-xs ${
+                change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-600'
+              }`}>
+                {change > 0 ? '+' : ''}{change}% zum Vormonat
+              </span>
+            </div>
+          )}
+
+          {/* Quick attendance summary */}
+          {attendanceDetails && (
+            <div className="mt-2 text-xs text-gray-500">
+              <div className="flex justify-between">
+                <span>Anwesend: {attendanceDetails.presentSessions}</span>
+                <span>Gesamt: {attendanceDetails.totalSessions}</span>
+              </div>
+            </div>
+          )}
+
+          {kpiStatus && (
+            <div className="mt-1">
+              <span className={`text-xs px-2 py-1 rounded-full bg-${kpiStatus.color}-100 text-${kpiStatus.color}-700`}>
+                {kpiStatus.text}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="p-3 rounded-full bg-green-100 text-green-600">
+          <Target className="w-6 h-6" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Attendance Details Modal
+const AttendanceDetailsModal: React.FC<{
+  attendanceDetails: NonNullable<ExtendedDashboardStats['attendanceDetails']>;
+  avgAttendance: number;
+  onClose: () => void;
+}> = ({ attendanceDetails, avgAttendance, onClose }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+      <div className="p-6 border-b">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Anwesenheits-Details</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <XCircle className="w-6 h-6" />
+          </button>
+        </div>
+      </div>
+      
+      <div className="p-6 space-y-6">
+        {/* Overall Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-green-50 p-4 rounded-lg text-center">
+            <p className="text-2xl font-bold text-green-600">{avgAttendance}%</p>
+            <p className="text-sm text-green-700">Durchschnitt</p>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg text-center">
+            <p className="text-2xl font-bold text-blue-600">{attendanceDetails.presentSessions}</p>
+            <p className="text-sm text-blue-700">Anwesend</p>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-lg text-center">
+            <p className="text-2xl font-bold text-yellow-600">{attendanceDetails.excusedSessions}</p>
+            <p className="text-sm text-yellow-700">Entschuldigt</p>
+          </div>
+          <div className="bg-red-50 p-4 rounded-lg text-center">
+            <p className="text-2xl font-bold text-red-600">{attendanceDetails.unexcusedSessions}</p>
+            <p className="text-sm text-red-700">Unentschuldigt</p>
+          </div>
+        </div>
+
+        {/* Weekday Breakdown */}
+        <div>
+          <h4 className="text-md font-semibold text-gray-900 mb-3">Anwesenheit nach Wochentag</h4>
+          <div className="grid grid-cols-5 gap-3">
+            {Object.entries(attendanceDetails.averageByWeekday).map(([day, rate]) => (
+              <div key={day} className="bg-gray-50 p-3 rounded-lg text-center">
+                <p className="text-lg font-bold text-gray-900">{rate as number}%</p>
+                <p className="text-xs text-gray-600">{day}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Course-specific Attendance */}
+        {attendanceDetails.courseAttendanceRates?.length > 0 && (
+          <div>
+            <h4 className="text-md font-semibold text-gray-900 mb-3">Anwesenheit nach Kurs</h4>
+            <div className="space-y-2">
+              {attendanceDetails.courseAttendanceRates.map((course: any) => (
+                <div key={course.kursId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{course.kursName}</p>
+                    <p className="text-sm text-gray-600">{course.totalSessions} Einheiten</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-lg font-bold ${
+                      course.attendanceRate >= 90 ? 'text-green-600' :
+                      course.attendanceRate >= 80 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {Math.round(course.attendanceRate)}%
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// Enhanced Charts Section with attendance focus
+const EnhancedChartsSection: React.FC<{
   chartData: any;
   timeRange: string;
-}
-
-const ChartsSection: React.FC<ChartsSectionProps> = ({ chartData, timeRange }) => {
+  attendanceDetails?: ExtendedDashboardStats['attendanceDetails'];
+}> = ({ chartData, timeRange, attendanceDetails }) => {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -395,58 +627,87 @@ const ChartsSection: React.FC<ChartsSectionProps> = ({ chartData, timeRange }) =
     },
     scales: {
       x: { grid: { display: false }, ticks: { color: '#6B7280' } },
-      y: { beginAtZero: true, grid: { color: 'rgba(107, 114, 128, 0.1)' }, ticks: { color: '#6B7280' } },
+      y: { 
+        beginAtZero: true, 
+        max: 100, // For attendance percentage
+        grid: { color: 'rgba(107, 114, 128, 0.1)' }, 
+        ticks: { 
+          color: '#6B7280',
+          callback: function(value: any) {
+            return value + '%';
+          }
+        } 
+      },
     },
   };
 
+  // Enhanced attendance trend data
   const attendanceData = {
     labels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
     datasets: [{
       label: 'Anwesenheitsrate (%)',
       data: chartData.attendanceTrend,
-      borderColor: 'rgb(59, 130, 246)',
-      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+      borderColor: 'rgb(34, 197, 94)',
+      backgroundColor: 'rgba(34, 197, 94, 0.1)',
       tension: 0.4,
       fill: true,
+      pointBackgroundColor: chartData.attendanceTrend.map((rate: number) => 
+        rate >= 90 ? 'rgb(34, 197, 94)' : 
+        rate >= 80 ? 'rgb(251, 146, 60)' : 'rgb(239, 68, 68)'
+      ),
+      pointRadius: 6,
     }],
   };
 
-  const enrollmentData = {
-    labels: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun'],
+  // Weekday attendance breakdown
+  const weekdayAttendanceData = attendanceDetails?.averageByWeekday ? {
+    labels: Object.keys(attendanceDetails.averageByWeekday),
     datasets: [{
-      label: 'Neue Anmeldungen',
-      data: chartData.monthlyEnrollments,
-      backgroundColor: 'rgba(34, 197, 94, 0.8)',
+      label: 'Anwesenheit (%)',
+      data: Object.values(attendanceDetails.averageByWeekday),
+      backgroundColor: Object.values(attendanceDetails.averageByWeekday).map((rate: any) => 
+        rate >= 90 ? 'rgba(34, 197, 94, 0.8)' : 
+        rate >= 80 ? 'rgba(251, 146, 60, 0.8)' : 'rgba(239, 68, 68, 0.8)'
+      ),
       borderRadius: 4,
     }],
-  };
-
-  const distributionData = {
-    labels: ['A1', 'A2', 'B1', 'B2', 'C1'],
-    datasets: [{
-      data: chartData.courseDistribution,
-      backgroundColor: [
-        'rgba(59, 130, 246, 0.8)',
-        'rgba(34, 197, 94, 0.8)',
-        'rgba(251, 146, 60, 0.8)',
-        'rgba(168, 85, 247, 0.8)',
-        'rgba(239, 68, 68, 0.8)',
-      ],
-    }],
-  };
+  } : null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Main attendance trend */}
       <ChartCard title={`Anwesenheitstrend (${timeRange})`}>
         <div className="h-64">
           <Line data={attendanceData} options={chartOptions} />
         </div>
       </ChartCard>
 
+      {/* Weekday attendance breakdown */}
+      {weekdayAttendanceData && (
+        <ChartCard title="Anwesenheit nach Wochentag">
+          <div className="h-64">
+            <Bar data={weekdayAttendanceData} options={chartOptions} />
+          </div>
+        </ChartCard>
+      )}
+
+      {/* Course distribution */}
       <ChartCard title="Kursverteilung nach Level">
         <div className="h-64">
           <Doughnut 
-            data={distributionData} 
+            data={{
+              labels: ['A1', 'A2', 'B1', 'B2', 'C1'],
+              datasets: [{
+                data: chartData.courseDistribution,
+                backgroundColor: [
+                  'rgba(59, 130, 246, 0.8)',
+                  'rgba(34, 197, 94, 0.8)',
+                  'rgba(251, 146, 60, 0.8)',
+                  'rgba(168, 85, 247, 0.8)',
+                  'rgba(239, 68, 68, 0.8)',
+                ],
+              }],
+            }}
             options={{
               responsive: true,
               maintainAspectRatio: false,
@@ -456,13 +717,31 @@ const ChartsSection: React.FC<ChartsSectionProps> = ({ chartData, timeRange }) =
         </div>
       </ChartCard>
 
-      <div className="lg:col-span-2">
-        <ChartCard title="Monatliche Anmeldungen">
-          <div className="h-64">
-            <Bar data={enrollmentData} options={chartOptions} />
-          </div>
-        </ChartCard>
-      </div>
+      {/* Monthly enrollments */}
+      <ChartCard title="Monatliche Anmeldungen">
+        <div className="h-64">
+          <Bar 
+            data={{
+              labels: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun'],
+              datasets: [{
+                label: 'Neue Anmeldungen',
+                data: chartData.monthlyEnrollments,
+                backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                borderRadius: 4,
+              }],
+            }}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true },
+              },
+            }} 
+          />
+        </div>
+      </ChartCard>
     </div>
   );
 };
