@@ -18,6 +18,7 @@ import { Kurs } from '../types/kurs.types';
 import { Teilnehmer } from '../types/teilnehmer.types';
 import { StundenplanEntry } from '../services/stundenplanService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import dashboardService from '../services/dashboardService';
 
 interface AttendanceData {
   anwesend: boolean;
@@ -198,17 +199,24 @@ const AnwesenheitPage: React.FC = () => {
     }
   }, [selectedDate, selectedKursDetails, stundenplan]);
 
-  // Save attendance mutation
+
+  // Update the saveMutation to properly invalidate dashboard queries:
   const saveMutation = useMutation({
     mutationFn: (data: BulkAnwesenheitDto) => anwesenheitService.createBulk(data),
     onSuccess: () => {
       toast.success('Anwesenheit erfolgreich gespeichert');
+      
+      // Clear service-level cache first
+      dashboardService.invalidateStatsCache();
+      
+      // Then invalidate React Query cache
       queryClient.invalidateQueries({ queryKey: ['anwesenheit'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardCharts'] });
+      queryClient.invalidateQueries({ queryKey: ['recentActivity'] });
+      
       setHasUnsavedChanges(false);
       refetchAttendance();
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Fehler beim Speichern der Anwesenheit');
     },
   });
 

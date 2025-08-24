@@ -463,5 +463,5 @@ export const useDashboardSettings = () => {
 export default useDashboard;
 
 // Additional fix for Users.tsx mutation isPending issue
-// In React Query v5, mutations use isPending instead of isPending
+// In React Query v5, mutations use isPending instead of isLoading
 // This should be applied to any useMutation hooks in your codebase

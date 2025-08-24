@@ -775,6 +775,16 @@ class DashboardService {
       keys: Array.from(this.cache.keys())
     };
   }
+
+  // Add this method to the DashboardService class:
+  invalidateStatsCache(): void {
+    this.cache.delete('dashboard-stats');
+    this.cache.delete('chart-data-7d');
+    this.cache.delete('chart-data-30d');
+    this.cache.delete('chart-data-90d');
+    console.log('Dashboard cache invalidated');
+  }
+
 }
 
 const dashboardService = new DashboardService();

@@ -1,6 +1,6 @@
 // Enhanced Dashboard.tsx with complete implementation including all components
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate , useLocation} from 'react-router-dom';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -69,6 +69,7 @@ interface ExtendedDashboardStats {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showAttendanceDetails, setShowAttendanceDetails] = useState(false);
   
   const {
@@ -101,6 +102,22 @@ const Dashboard: React.FC = () => {
     hasActivity: !!recentActivity 
   });
 
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    // Skip refresh on initial mount (data is already loading)
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    // Refetch dashboard data when navigating back to dashboard
+    if (location.pathname === '/dashboard') {
+      console.log('Navigated to dashboard, refreshing data...');
+      refresh();
+    }
+}, [location.pathname, refresh]);
+
   // Show loading state only if we have no data at all
   if (isPending && !stats) {
     return (
@@ -131,6 +148,7 @@ const Dashboard: React.FC = () => {
       </div>
     );
   }
+
 
   // Cast stats to extended type for attendanceDetails access
   const extendedStats = stats as ExtendedDashboardStats;
