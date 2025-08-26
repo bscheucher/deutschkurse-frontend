@@ -661,7 +661,7 @@ const EnhancedChartsSection: React.FC<{
 
   // Enhanced attendance trend data
   const attendanceData = {
-    labels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+    labels: ['Mo', 'Di', 'Mi', 'Do', 'Fr'],
     datasets: [{
       label: 'Anwesenheitsrate (%)',
       data: chartData.attendanceTrend,

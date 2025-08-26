@@ -654,7 +654,7 @@ class DashboardService {
 
   // Keep existing mock/fallback methods
   private getMockAttendanceTrend(): number[] {
-    return [92, 88, 95, 91, 89, 94, 93];
+    return [92, 88, 95, 91, 89];
   }
 
   private getMockCourseDistribution(): number[] {
