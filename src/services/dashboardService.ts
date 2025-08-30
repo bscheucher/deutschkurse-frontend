@@ -1,4 +1,4 @@
-// src/services/dashboardService.ts - Enhanced with proper attendance calculation
+// src/services/dashboardService.ts - Enhanced with proper attendance calculation - Removed Success Rate
 import api from './api';
 import { format, subDays, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
 
@@ -7,7 +7,6 @@ interface DashboardStats {
   totalTeilnehmer: number;
   availableTrainer: number;
   avgAttendance: number;
-  successRate: number;
   upcomingKurse: Array<{
     id: number;
     name: string;
@@ -134,14 +133,12 @@ class DashboardService {
       const upcomingKurse = this.getUpcomingKurse(kurseData);
       const recentEnrollments = this.getRecentEnrollments(teilnehmerData);
       const coursesThisMonth = this.getCoursesThisMonth(kurseData);
-      const successRate = this.calculateSuccessRate(kurseData);
 
       const stats: DashboardStats = {
         activeKurse,
         totalTeilnehmer,
         availableTrainer,
         avgAttendance,
-        successRate,
         upcomingKurse,
         recentEnrollments,
         coursesThisMonth,
@@ -639,19 +636,6 @@ class DashboardService {
     }
   }
 
-  private calculateSuccessRate(kurse: any[]): number {
-    try {
-      const finishedCourses = kurse.filter((k: any) => 
-        k.status === 'abgeschlossen' || k.status === 'abgebrochen'
-      );
-      return finishedCourses.length > 0 
-        ? Math.round((kurse.filter((k: any) => k.status === 'abgeschlossen').length / finishedCourses.length) * 100)
-        : 95;
-    } catch {
-      return 95;
-    }
-  }
-
   // Keep existing mock/fallback methods
   private getMockAttendanceTrend(): number[] {
     return [92, 88, 95, 91, 89];
@@ -692,7 +676,6 @@ class DashboardService {
       totalTeilnehmer: 0,
       availableTrainer: 0,
       avgAttendance: 85,
-      successRate: 95,
       upcomingKurse: [],
       recentEnrollments: 0,
       coursesThisMonth: 0,

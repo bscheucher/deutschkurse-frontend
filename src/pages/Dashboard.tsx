@@ -1,4 +1,4 @@
-// Enhanced Dashboard.tsx with complete implementation including all components
+// Enhanced Dashboard.tsx with complete implementation - Removed Success Rate
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate , useLocation} from 'react-router-dom';
 import {
@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import { 
-  BookOpen, Users, School, Calendar, Target, Award,
+  BookOpen, Users, School, Calendar, Target,
   RefreshCw, Download, Activity, Plus,
   TrendingUp, TrendingDown, ArrowRight, Info,
   CheckCircle, AlertTriangle, XCircle
@@ -43,7 +43,6 @@ interface ExtendedDashboardStats {
   totalTeilnehmer: number;
   availableTrainer: number;
   avgAttendance: number;
-  successRate: number;
   upcomingKurse: any[];
   recentEnrollments: number;
   coursesThisMonth: number;
@@ -340,7 +339,7 @@ const QuickActionButton: React.FC<{
   );
 };
 
-// Enhanced Stats Grid with better attendance visualization
+// Enhanced Stats Grid - Removed Success Rate
 interface StatsGridProps {
   stats: ExtendedDashboardStats;
   kpiSummary: any;
@@ -354,7 +353,7 @@ const StatsGrid: React.FC<StatsGridProps> = ({
   onNavigate, 
   onShowAttendanceDetails 
 }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
     <StatCard
       title="Aktive Kurse"
       value={stats.activeKurse}
@@ -379,14 +378,6 @@ const StatsGrid: React.FC<StatsGridProps> = ({
       kpiStatus={kpiSummary?.attendance}
       onClick={() => onNavigate('/anwesenheit')}
       onShowDetails={onShowAttendanceDetails}
-    />
-    <StatCard
-      title="Erfolgsquote"
-      value={`${stats.successRate}%`}
-      change={5}
-      icon={Award}
-      color="orange"
-      status={kpiSummary?.success}
     />
   </div>
 );

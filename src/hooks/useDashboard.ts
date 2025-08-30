@@ -1,4 +1,4 @@
-// src/hooks/useDashboard.ts - Fixed for React Query v5 compatibility
+// src/hooks/useDashboard.ts - Fixed for React Query v5 compatibility - Removed Success Rate
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dashboardService from '../services/dashboardService';
@@ -9,7 +9,6 @@ export interface DashboardStats {
   totalTeilnehmer: number;
   availableTrainer: number;
   avgAttendance: number;
-  successRate: number;
   upcomingKurse: Array<{
     id: number;
     name: string;
@@ -347,20 +346,13 @@ export const useDashboard = (options: UseDashboardOptions = {}): UseDashboardRet
   };
 };
 
-// Hook für Dashboard-Berechnungen
+// Hook für Dashboard-Berechnungen - Removed Success Rate functions
 export const useDashboardCalculations = (stats?: DashboardStats) => {
   const getAttendanceStatus = useCallback((rate: number) => {
     if (rate >= 90) return { status: 'excellent', color: 'green', text: 'Ausgezeichnet' };
     if (rate >= 80) return { status: 'good', color: 'blue', text: 'Gut' };
     if (rate >= 70) return { status: 'warning', color: 'yellow', text: 'Verbesserungsfähig' };
     return { status: 'poor', color: 'red', text: 'Niedrig' };
-  }, []);
-
-  const getSuccessRateStatus = useCallback((rate: number) => {
-    if (rate >= 95) return { status: 'excellent', color: 'green', text: 'Hervorragend' };
-    if (rate >= 85) return { status: 'good', color: 'blue', text: 'Sehr gut' };
-    if (rate >= 75) return { status: 'warning', color: 'yellow', text: 'Gut' };
-    return { status: 'poor', color: 'red', text: 'Verbesserungsbedarf' };
   }, []);
 
   const getTrendIndicator = useCallback((change: number) => {
@@ -376,7 +368,6 @@ export const useDashboardCalculations = (stats?: DashboardStats) => {
 
     return {
       attendance: getAttendanceStatus(stats.avgAttendance),
-      success: getSuccessRateStatus(stats.successRate),
       coursesTrend: getTrendIndicator(stats.trends.kurseChange),
       participantsTrend: getTrendIndicator(stats.trends.teilnehmerChange),
       attendanceTrend: getTrendIndicator(stats.trends.attendanceChange),
@@ -389,11 +380,10 @@ export const useDashboardCalculations = (stats?: DashboardStats) => {
         ? Math.round((stats.activeKurse / stats.availableTrainer) * 100)
         : 0,
     };
-  }, [stats, getAttendanceStatus, getSuccessRateStatus, getTrendIndicator]);
+  }, [stats, getAttendanceStatus, getTrendIndicator]);
 
   return {
     getAttendanceStatus,
-    getSuccessRateStatus,
     getTrendIndicator,
     getKpiSummary
   };
