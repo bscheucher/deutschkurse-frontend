@@ -1,6 +1,7 @@
-// src/services/dashboardService.ts - Enhanced with proper attendance calculation - Removed Success Rate
 import api from './api';
-import { format, subDays, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import { format, subDays, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval, getDay } from 'date-fns';
+import anwesenheitService from './anwesenheitService';
+
 
 interface DashboardStats {
   activeKurse: number;
@@ -694,10 +695,65 @@ class DashboardService {
     return [];
   }
 
-  private async getAttendanceTrendDataSafe(timeRange: '7d' | '30d' | '90d'): Promise<number[]> {
-    // ... existing implementation
+private async getAttendanceTrendDataSafe(timeRange: '7d' | '30d' | '90d'): Promise<number[]> {
+  try {
+    console.log(`Fetching real attendance trend data for ${timeRange}...`);
+    
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+    const endDate = format(new Date(), 'yyyy-MM-dd');
+    const startDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
+    
+    // Fetch real attendance records
+    const attendanceRecords = await anwesenheitService.getByDateRange(startDate, endDate);
+    
+    if (attendanceRecords.length === 0) {
+      console.log('No attendance records found, using fallback data');
+      return this.getMockAttendanceTrend();
+    }
+
+    // Group by weekday (1=Monday, 2=Tuesday, etc.)
+    const weekdayData: Record<number, { total: number; present: number }> = {
+      1: { total: 0, present: 0 }, // Monday
+      2: { total: 0, present: 0 }, // Tuesday  
+      3: { total: 0, present: 0 }, // Wednesday
+      4: { total: 0, present: 0 }, // Thursday
+      5: { total: 0, present: 0 }  // Friday
+    };
+
+    // Process attendance records
+    attendanceRecords.forEach((record: any) => {
+      try {
+        const date = new Date(record.datum);
+        const dayOfWeek = getDay(date); // 0=Sunday, 1=Monday, etc.
+        
+        // Convert to Monday=1, Friday=5
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+          weekdayData[dayOfWeek].total++;
+          if (record.anwesend) {
+            weekdayData[dayOfWeek].present++;
+          }
+        }
+      } catch (error) {
+        console.warn('Error processing attendance record:', error);
+      }
+    });
+
+    // Calculate percentages for each weekday
+    const attendanceRates = [];
+    for (let day = 1; day <= 5; day++) {
+      const data = weekdayData[day];
+      const rate = data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
+      attendanceRates.push(rate);
+    }
+
+    console.log('Real attendance trend calculated:', attendanceRates);
+    return attendanceRates;
+
+  } catch (error) {
+    console.error('Error fetching real attendance trend data:', error);
     return this.getMockAttendanceTrend();
   }
+}
 
   private async getCourseDistributionDataSafe(): Promise<number[]> {
     // ... existing implementation
@@ -770,5 +826,5 @@ class DashboardService {
 
 }
 
-const dashboardService = new DashboardService();
-export default dashboardService;
+
+export default new DashboardService();
